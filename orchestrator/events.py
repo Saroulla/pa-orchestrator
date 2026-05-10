@@ -38,6 +38,12 @@ def _format_telegram(kind: str, payload: dict) -> str:
     return text if text else json.dumps(payload)
 
 
+def _format_system_message(message_type: str, payload: dict) -> str:
+    prefix = f"[SYSTEM/{message_type}]"
+    inline_text = payload.get("inline_text", "")
+    return f"{prefix} {inline_text}".strip() if inline_text else prefix
+
+
 async def events_consumer(
     db: aiosqlite.Connection,
     ws_manager: Any,
@@ -76,6 +82,32 @@ async def _dispatch_one(
         payload = {"raw": row.get("payload")}
 
     delivered = False
+    kind = row["kind"]
+
+    if kind == "system_message":
+        message_type = row.get("message_type") or "unknown"
+        text = _format_system_message(message_type, payload)
+        if channel == "web":
+            ws_payload = {"event": "system_message", "data": {"text": text, "message_type": message_type}}
+            delivered = await ws_manager.send(session_id, ws_payload)
+        elif channel == "telegram":
+            if bot is not None:
+                sess = await store.get_session(db, session_id)
+                chat_id = sess.get("telegram_chat_id") if sess else None
+                if chat_id:
+                    from orchestrator.telegram import telegram_send
+                    try:
+                        await telegram_send(bot, chat_id, text)
+                        delivered = True
+                    except Exception as exc:
+                        logger.error("events_consumer: telegram_send system_message failed: %s", exc)
+                else:
+                    delivered = True
+            else:
+                delivered = True
+        if delivered:
+            await store.mark_event_delivered(db, row["id"])
+        return
 
     if channel == "web":
         ws_payload = {"event": row["kind"], "data": payload}

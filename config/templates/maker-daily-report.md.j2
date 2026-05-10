@@ -1,0 +1,55 @@
+# MAKER Daily Report — {{ date }}
+
+## Jobs Completed ({{ completed_jobs | length }})
+
+{% if completed_jobs %}
+| Job | Cost | Summary |
+|-----|------|---------|
+{% for job in completed_jobs %}
+| {{ job.name }} | ${{ "%.4f" | format(job.cost_usd | float) }} | {{ job.result_summary or "—" }} |
+{% endfor %}
+{% else %}
+None.
+{% endif %}
+
+## Jobs Failed ({{ failed_jobs | length }})
+
+{% if failed_jobs %}
+| Job | Reason |
+|-----|--------|
+{% for job in failed_jobs %}
+| {{ job.name }} | {{ job.result_summary or "—" }} |
+{% endfor %}
+{% else %}
+None.
+{% endif %}
+
+## System Events
+
+{% if system_messages %}
+| Time (UTC) | Type |
+|------------|------|
+{% for msg in system_messages %}
+| {{ msg.created_at[:16] if msg.created_at else "—" }} | {{ msg.message_type or "—" }} |
+{% endfor %}
+{% else %}
+None.
+{% endif %}
+
+## Costs by Tier
+
+{% if cost_by_tier %}
+| Tier | Cost USD |
+|------|----------|
+{% for tier, cost in cost_by_tier.items() %}
+| {{ tier }} | ${{ "%.4f" | format(cost | float) }} |
+{% endfor %}
+{% else %}
+No spend today.
+{% endif %}
+
+## Google CSE Quota
+
+- Used today: {{ quota.used_today }}
+- Free remaining: {{ quota.free_remaining }}
+- Over-quota cap in force: ${{ "%.2f" | format(quota.over_quota_cap_usd | float) }}

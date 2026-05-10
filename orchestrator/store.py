@@ -59,7 +59,8 @@ _DDL = [
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL,
     delivered INTEGER NOT NULL DEFAULT 0,
-    delivered_at TEXT
+    delivered_at TEXT,
+    message_type TEXT
 )""",
     "CREATE INDEX IF NOT EXISTS idx_events_undelivered ON events(delivered, created_at)",
     """CREATE TABLE IF NOT EXISTS jobs (
@@ -91,9 +92,20 @@ _DDL = [
     adapter TEXT NOT NULL,
     tokens_in INTEGER,
     tokens_out INTEGER,
-    cost_usd REAL NOT NULL
+    cost_usd REAL NOT NULL,
+    tier TEXT NOT NULL DEFAULT ''
 )""",
     "CREATE INDEX IF NOT EXISTS idx_cost_session_time ON cost_ledger(session_id, timestamp)",
+]
+
+# ---------------------------------------------------------------------------
+# Migrations — columns added after initial schema deployment.
+# Each statement is idempotent: the except swallows "duplicate column" errors.
+# ---------------------------------------------------------------------------
+
+_MIGRATIONS = [
+    "ALTER TABLE events ADD COLUMN message_type TEXT",
+    "ALTER TABLE cost_ledger ADD COLUMN tier TEXT NOT NULL DEFAULT ''",
 ]
 
 # ---------------------------------------------------------------------------
@@ -122,14 +134,25 @@ def _validate_session_id(session_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _migrate_db(db: aiosqlite.Connection) -> None:
+    """Add new columns to existing tables. Each ALTER is swallowed if column already exists."""
+    for stmt in _MIGRATIONS:
+        try:
+            await db.execute(stmt)
+            await db.commit()
+        except Exception:
+            pass
+
+
 async def init_db(db: aiosqlite.Connection) -> None:
-    """Apply WAL PRAGMAs and run all DDL (idempotent CREATE TABLE IF NOT EXISTS)."""
+    """Apply WAL PRAGMAs, run all DDL (idempotent), then run column migrations."""
     await db.execute("PRAGMA journal_mode=WAL")
     await db.execute("PRAGMA synchronous=NORMAL")
     await db.execute("PRAGMA busy_timeout=5000")
     for stmt in _DDL:
         await db.execute(stmt)
     await db.commit()
+    await _migrate_db(db)
 
 
 # ---------------------------------------------------------------------------
@@ -304,3 +327,88 @@ async def insert_event(
         (session_id, channel, kind, _json.dumps(payload), _now()),
     )
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# System messages (A5 — MAKER helpers)
+# ---------------------------------------------------------------------------
+
+
+async def add_system_message(
+    db: aiosqlite.Connection,
+    session_id: str,
+    channel: str,
+    message_type: str,
+    payload: dict,
+) -> int:
+    """Insert a system_message event row; return its autoincrement id."""
+    import json as _json
+    async with db.execute(
+        """INSERT INTO events
+           (session_id, channel, kind, payload, created_at, delivered, message_type)
+           VALUES (?, ?, 'system_message', ?, ?, 0, ?)""",
+        (session_id, channel, _json.dumps(payload), _now(), message_type),
+    ) as cur:
+        row_id: int = cur.lastrowid  # type: ignore[assignment]
+    await db.commit()
+    return row_id
+
+
+async def query_system_messages_by_day(
+    db: aiosqlite.Connection,
+    date_str: str,
+) -> list[dict]:
+    """Return all system_message events whose UTC created_at date matches date_str (YYYY-MM-DD)."""
+    async with db.execute(
+        """SELECT * FROM events
+           WHERE kind = 'system_message'
+             AND DATE(created_at) = ?
+           ORDER BY created_at""",
+        (date_str,),
+    ) as cur:
+        rows = await cur.fetchall()
+        return [_to_dict(cur, row) for row in rows]
+
+
+async def cost_by_tier_for_day(
+    db: aiosqlite.Connection,
+    date_str: str,
+) -> dict[str, float]:
+    """Return {tier: total_cost_usd} aggregated from cost_ledger for date_str (YYYY-MM-DD)."""
+    async with db.execute(
+        """SELECT tier, SUM(cost_usd) AS total
+           FROM cost_ledger
+           WHERE DATE(timestamp) = ?
+           GROUP BY tier""",
+        (date_str,),
+    ) as cur:
+        rows = await cur.fetchall()
+        return {row[0]: float(row[1]) for row in rows}
+
+
+async def query_jobs_for_day(
+    db: aiosqlite.Connection,
+    date_str: str,
+) -> dict[str, list[dict]]:
+    """Return {completed, failed, scheduled} job run summaries for date_str (YYYY-MM-DD)."""
+    async with db.execute(
+        """SELECT j.id, j.name, jr.status, jr.completed_at,
+                  jr.result_summary, COALESCE(jr.cost_usd, 0.0) AS cost_usd
+           FROM job_runs jr
+           JOIN jobs j ON j.id = jr.job_id
+           WHERE DATE(jr.started_at) = ?
+           ORDER BY jr.started_at""",
+        (date_str,),
+    ) as cur:
+        rows = await cur.fetchall()
+        buckets: dict[str, list[dict]] = {"completed": [], "failed": [], "scheduled": []}
+        for row in rows:
+            entry = {col[0]: row[i] for i, col in enumerate(cur.description)}
+            status = entry.get("status", "")
+            if status == "success":
+                buckets["completed"].append(entry)
+            elif status == "failed":
+                buckets["failed"].append(entry)
+            else:
+                buckets["scheduled"].append(entry)
+        return buckets

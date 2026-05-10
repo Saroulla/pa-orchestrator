@@ -66,6 +66,11 @@ class ToolAccess(BaseModel):
     pdf_extract: str
     email_send: str
     template: str
+    pa_groq: str = "enabled"
+    pa_haiku: str = "enabled"
+    google_cse: str = "enabled"
+    http_fetch: str = "enabled"
+    article_extract: str = "enabled"
 
 
 class FileWriteConfig(BaseModel):
@@ -77,6 +82,7 @@ class ContextSwitch(BaseModel):
     pa_to_cto: str
     cto_to_pa: str
     pa_to_desktop: str
+    maker_to_cto: str = "allowed_sync_only"
 
 
 class SubAgentConfig(BaseModel):

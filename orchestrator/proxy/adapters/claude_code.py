@@ -217,7 +217,7 @@ def _format_result(env: dict) -> str:
 
 class ClaudeCodeAdapter:
     name: str = "claude_code"
-    allowed_callers: set[Caller] = {Caller.PA}
+    allowed_callers: set[Caller] = {Caller.PA, Caller.MAKER}
 
     def __init__(
         self,

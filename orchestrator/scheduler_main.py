@@ -16,12 +16,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
+import yaml
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from orchestrator import job_runner
+from orchestrator.maker import browser_context as _browser_context
+from orchestrator.maker import daily_digest as _daily_digest
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +38,8 @@ DB_PATH = REPO_ROOT / "orchestrator.db"
 DB_URL = f"sqlite:///{DB_PATH}"
 
 SYNC_INTERVAL_S = 30
+BROWSER_IDLE_TICK_S = 60
+MAKER_CONFIG_PATH = REPO_ROOT / "config" / "maker" / "config.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -94,23 +100,44 @@ async def _sync_jobs(scheduler: AsyncIOScheduler) -> None:
     # Add jobs not yet scheduled
     for job_id, row in wanted.items():
         if scheduler.get_job(job_id) is None:
-            try:
-                cron_kwargs = _parse_cron(row["cron"])
-            except ValueError as exc:
-                logger.warning("scheduler: skipping job %s — %s", row["name"], exc)
-                continue
-            scheduler.add_job(
-                _run_job,
-                trigger="cron",
-                id=job_id,
-                name=row["name"],
-                args=[job_id],
-                replace_existing=True,
-                **cron_kwargs,
-            )
-            logger.info(
-                "scheduler: registered job %s (cron=%s)", row["name"], row["cron"]
-            )
+            if row["cron"] == "@once":
+                run_at_str = row.get("next_run") or ""
+                if not run_at_str:
+                    logger.warning("scheduler: @once job %s has no next_run, skipping", row["name"])
+                    continue
+                try:
+                    run_at = datetime.fromisoformat(run_at_str)
+                except ValueError as exc:
+                    logger.warning("scheduler: @once job %s bad next_run %r: %s", row["name"], run_at_str, exc)
+                    continue
+                scheduler.add_job(
+                    _run_job,
+                    trigger="date",
+                    run_date=run_at,
+                    id=job_id,
+                    name=row["name"],
+                    args=[job_id],
+                    replace_existing=True,
+                )
+                logger.info("scheduler: registered @once job %s (run_at=%s)", row["name"], run_at_str)
+            else:
+                try:
+                    cron_kwargs = _parse_cron(row["cron"])
+                except ValueError as exc:
+                    logger.warning("scheduler: skipping job %s — %s", row["name"], exc)
+                    continue
+                scheduler.add_job(
+                    _run_job,
+                    trigger="cron",
+                    id=job_id,
+                    name=row["name"],
+                    args=[job_id],
+                    replace_existing=True,
+                    **cron_kwargs,
+                )
+                logger.info(
+                    "scheduler: registered job %s (cron=%s)", row["name"], row["cron"]
+                )
 
     # Remove jobs that are no longer enabled / present
     for job in scheduler.get_jobs():
@@ -127,6 +154,58 @@ async def _sync_loop(scheduler: AsyncIOScheduler) -> None:
             await _sync_jobs(scheduler)
         except Exception as exc:
             logger.exception("scheduler: sync_loop error: %s", exc)
+
+
+def _load_digest_config() -> tuple[int, int, str]:
+    """Return (hour, minute, tz_str) from config/maker/config.yaml. Defaults: 18:00 UTC."""
+    try:
+        raw = yaml.safe_load(MAKER_CONFIG_PATH.read_text(encoding="utf-8"))
+        run_cfg = raw.get("run", {})
+        time_str = run_cfg.get("daily_report_send_at_local", "18:00")
+        tz_str = run_cfg.get("daily_report_timezone", "UTC")
+        h, m = (int(x) for x in time_str.split(":", 1))
+        return h, m, tz_str
+    except Exception as exc:
+        logger.warning("scheduler: digest config unreadable: %s — using 18:00 UTC", exc)
+        return 18, 0, "UTC"
+
+
+def _register_daily_digest(scheduler: AsyncIOScheduler) -> None:
+    """Register the daily email digest as a CronTrigger. Idempotent."""
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    from apscheduler.triggers.cron import CronTrigger
+
+    hour, minute, tz_str = _load_digest_config()
+    try:
+        tz = ZoneInfo(tz_str)
+    except (ZoneInfoNotFoundError, KeyError) as exc:
+        logger.warning("scheduler: unknown timezone %r: %s — falling back to UTC", tz_str, exc)
+        tz = ZoneInfo("UTC")
+
+    scheduler.add_job(
+        _daily_digest.run_digest,
+        trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+        id="maker_daily_digest",
+        name="MAKER daily digest",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
+    )
+    logger.info("scheduler: daily digest registered at %02d:%02d %s", hour, minute, tz_str)
+
+
+async def _browser_idle_loop() -> None:
+    """Periodically close the persistent Chromium context if it has been idle."""
+    while True:
+        await asyncio.sleep(BROWSER_IDLE_TICK_S)
+        try:
+            ctx = _browser_context.get_browser_context()
+            closed = await ctx.close_if_idle()
+            if closed:
+                logger.info("scheduler: browser context idle-closed")
+        except Exception as exc:
+            logger.exception("scheduler: browser_idle_loop error: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -146,8 +225,13 @@ async def main() -> None:
     scheduler.start()
     logger.info("scheduler: APScheduler started (jobstore=%s)", DB_URL)
 
+    _register_daily_digest(scheduler)
+    _browser_context.init_browser_context()
+    logger.info("scheduler: browser context registered (lazy-start)")
+
     await _sync_jobs(scheduler)
     asyncio.create_task(_sync_loop(scheduler))
+    asyncio.create_task(_browser_idle_loop())
 
     try:
         await asyncio.Event().wait()  # run forever
@@ -155,6 +239,10 @@ async def main() -> None:
         pass
     finally:
         scheduler.shutdown(wait=False)
+        try:
+            await _browser_context.get_browser_context().aclose()
+        except Exception as exc:
+            logger.warning("scheduler: browser shutdown raised: %s", exc)
         logger.info("scheduler: shutdown complete")
 
 

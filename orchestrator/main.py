@@ -21,16 +21,15 @@ from fastapi.staticfiles import StaticFiles
 from orchestrator import escalation, store
 from orchestrator.config import get_config, start_watcher
 from orchestrator.events import events_consumer
-from orchestrator.fsm import transition
-from orchestrator.history import build_context, slide_and_summarise
-from orchestrator.models import Caller, Channel, Intent, Mode
-from orchestrator.parser import parse
+from orchestrator.maker import main as maker_main
 from orchestrator.proxy.adapters.brave_search import BraveSearchAdapter
 from orchestrator.proxy.adapters.claude_api import ClaudeAPIAdapter
 from orchestrator.proxy.adapters.claude_code import ClaudeCodeAdapter
 from orchestrator.proxy.adapters.email_send import EmailAdapter
 from orchestrator.proxy.adapters.file_read import FileReadAdapter
 from orchestrator.proxy.adapters.file_write import FileWriteAdapter
+from orchestrator.proxy.adapters.pa_groq import PAGroqAdapter
+from orchestrator.proxy.adapters.pa_haiku import PAHaikuAdapter
 from orchestrator.proxy.adapters.pdf_extract import PDFExtractAdapter
 from orchestrator.proxy.adapters.playwright_web import PlaywrightWebAdapter
 from orchestrator.proxy.adapters.template_render import TemplateRenderAdapter
@@ -38,7 +37,6 @@ from orchestrator.proxy.dispatcher import Dispatcher
 from orchestrator.auth import router as auth_router, verify_session
 from orchestrator.spawner import SubAgentSpawner
 from orchestrator.telegram import router as telegram_router
-from orchestrator.tokens import count as count_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -79,48 +77,8 @@ ws_manager = WebSocketManager()
 
 
 # ---------------------------------------------------------------------------
-# Chat handler factory
+# Chat handler — thin forwarder to maker.main.dispatch (F1)
 # ---------------------------------------------------------------------------
-
-def _format_response(mode: Mode, body: str, mode_msg: str | None) -> str:
-    label = f"[{mode.value}]>"
-    formatted = f"{label} {body}"
-    if mode_msg:
-        formatted = f"[PA]> {mode_msg}\n{formatted}"
-    return formatted
-
-
-def _deferred_intent_from(pending: dict | None) -> dict | None:
-    """Extract the deferred intent dict embedded in an escalation's context.
-
-    The CTO confirmation flow stores ``{"deferred_intent": {"kind": ..., "text": ...},
-    "prompt": ...}`` as the escalation row's ``context`` (JSON-encoded). Older or
-    non-CTO escalations have a plain string context — those return None.
-    """
-    if pending is None:
-        return None
-    raw = pending.get("context")
-    if not raw or not isinstance(raw, str):
-        return None
-    try:
-        obj = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not isinstance(obj, dict):
-        return None
-    deferred = obj.get("deferred_intent")
-    if isinstance(deferred, dict) and isinstance(deferred.get("text"), str):
-        return deferred
-    return None
-
-
-_CONFIRMATION_REDISPATCH_DEADLINE_S = 300.0
-_CONFIRMATION_PROMPT_PREFIX = (
-    "User confirmed (a). Proceed with the plan you announced. "
-    "Do NOT emit another plan envelope — go straight to action / result envelopes.\n\n"
-    "Original request: "
-)
-
 
 def _make_chat_handler(app: FastAPI):
     async def chat_handler(
@@ -129,282 +87,12 @@ def _make_chat_handler(app: FastAPI):
         channel: str = "web",
         chat_id: int | None = None,
     ) -> dict:
-        db = app.state.db
-        dispatcher: Dispatcher = app.state.dispatcher
-        pa_system_prompt = app.state.pa_system_prompt
-
-        t0 = time.monotonic()
-        config = get_config()
-
-        # 1. Ensure session exists
-        session = await store.get_or_create_session(db, session_id, channel)
-        current_mode = Mode(session["mode"])
-
-        # 2. @cost meta-command — inline, no LLM
-        if text.strip().lower() == "@cost":
-            cost = await store.get_session_cost(db, session_id)
-            return {
-                "response": f"[PA]> Session cost so far: ${cost:.4f}",
-                "mode": current_mode.value,
-                "cost_usd": 0.0,
-                "latency_ms": int((time.monotonic() - t0) * 1000),
-            }
-
-        # 3. Escalation interception — peek at any pending row first so we can
-        #    pick up a deferred intent if the user resolves it affirmatively.
-        try:
-            pending = await escalation.pending_for(db, session_id)
-        except Exception as exc:
-            logger.warning("chat_handler: pending_for failed: %s", exc)
-            pending = None
-
-        try:
-            esc_outcome, esc_key = await escalation.resolve_incoming_message(
-                db, session_id, text
-            )
-        except Exception as exc:
-            logger.warning("chat_handler: escalation lookup failed: %s", exc)
-            esc_outcome, esc_key = "passthrough", None
-
-        deferred = (
-            _deferred_intent_from(pending)
-            if (esc_outcome == "resolved" and esc_key == "a")
-            else None
+        return await maker_main.dispatch(
+            session_id=session_id,
+            text=text,
+            channel=channel,
+            chat_id=chat_id,
         )
-
-        if esc_outcome == "resolved" and deferred is None:
-            # Either resolved with a non-affirmative key, or no deferred work
-            # was attached (e.g. bare confirmation prompt with nothing to redo).
-            return {
-                "response": f"[PA]> Got it — proceeding with option ({esc_key}).",
-                "mode": current_mode.value,
-                "cost_usd": 0.0,
-                "latency_ms": int((time.monotonic() - t0) * 1000),
-            }
-
-        # 4. Parse + FSM — OR build a synthetic CTO intent if we are
-        #    re-firing a deferred plan post-confirmation.
-        mode_msg: str | None
-        if deferred is not None:
-            # Re-dispatch path: bypass parser/FSM, force CTO mode + fresh intent.
-            if current_mode != Mode.CTO:
-                await store.update_session_mode(db, session_id, Mode.CTO.value)
-                current_mode = Mode.CTO
-            intent = Intent(
-                kind="code",
-                payload={
-                    "text": _CONFIRMATION_PROMPT_PREFIX + deferred.get("text", ""),
-                },
-                session_id=session_id,
-                mode=Mode.CTO,
-                caller=Caller.PA,
-                deadline_s=_CONFIRMATION_REDISPATCH_DEADLINE_S,
-            )
-            mode_msg = None
-        else:
-            intent = parse(text, session_id, current_mode, Caller.PA)
-            new_mode, mode_msg = transition(current_mode, intent.kind, Channel(channel))
-            if new_mode != current_mode:
-                await store.update_session_mode(db, session_id, new_mode.value)
-                current_mode = new_mode
-
-            # 5. Mode-switch-only message (e.g. bare "@CTO")
-            if not intent.payload.get("text", "").strip() and mode_msg:
-                return {
-                    "response": f"[PA]> {mode_msg}",
-                    "mode": current_mode.value,
-                    "cost_usd": 0.0,
-                    "latency_ms": int((time.monotonic() - t0) * 1000),
-                }
-
-            # 6. Desktop stub
-            if intent.kind == "desktop":
-                return {
-                    "response": "[PA]> @Desktop is coming in Phase 1.2.",
-                    "mode": current_mode.value,
-                    "cost_usd": 0.0,
-                    "latency_ms": int((time.monotonic() - t0) * 1000),
-                }
-
-        # 7. Budget check
-        cost_so_far = await store.get_session_cost(db, session_id)
-        if cost_so_far >= config.budgets.per_session_usd_per_day:
-            return {
-                "response": (
-                    f"[PA]> Daily budget "
-                    f"(${config.budgets.per_session_usd_per_day:.2f}) reached."
-                ),
-                "mode": current_mode.value,
-                "cost_usd": 0.0,
-                "latency_ms": int((time.monotonic() - t0) * 1000),
-            }
-
-        # @remember intercept
-        if intent.payload.get("meta_command") == "remember_interest":
-            interest_text = intent.payload.get("text", "").strip()
-            if not interest_text:
-                return {
-                    "response": "[PA]> Usage: @remember <what you're interested in>",
-                    "mode": current_mode.value,
-                    "cost_usd": 0.0,
-                    "latency_ms": int((time.monotonic() - t0) * 1000),
-                }
-            from orchestrator.interests import update_interests, build_interests_context
-            from orchestrator.pa_prompt import build_pa_system_prompt
-            update_interests(interest_text)
-            # Rebuild and cache the system prompt so the new interest takes effect immediately.
-            app.state.pa_system_prompt = build_pa_system_prompt()
-            return {
-                "response": f"[PA]> Got it — I'll remember you're interested in: {interest_text}",
-                "mode": current_mode.value,
-                "cost_usd": 0.0,
-                "latency_ms": int((time.monotonic() - t0) * 1000),
-            }
-
-        # @rebuild-plan intercept
-        if intent.payload.get("meta_command") == "rebuild_plan":
-            from orchestrator.plan_author import rebuild_plan
-            file_arg = intent.payload.get("text", "").strip()
-            if not file_arg:
-                return {
-                    "response": "[PA]> Usage: @rebuild-plan jobs/<name>.md",
-                    "mode": current_mode.value,
-                    "cost_usd": 0.0,
-                    "latency_ms": int((time.monotonic() - t0) * 1000),
-                }
-            claude_api_adapter = app.state.dispatcher._tools.get("reason")
-            result_msg = await rebuild_plan(session_id, file_arg, claude_api_adapter)
-            return {
-                "response": result_msg,
-                "mode": current_mode.value,
-                "cost_usd": 0.0,
-                "latency_ms": int((time.monotonic() - t0) * 1000),
-            }
-
-        # 8. Save user message
-        try:
-            user_tokens = count_tokens(text)
-        except Exception as exc:
-            logger.warning("chat_handler: count_tokens failed, using char-fallback: %s", exc)
-            user_tokens = max(1, len(text) // 4)
-        await store.add_message(db, session_id, "user", text, user_tokens)
-
-        response_text = ""
-
-        # 9. Dispatch
-        if current_mode == Mode.CTO:
-            try:
-                brief_ctx = await build_context(
-                    db,
-                    session_id,
-                    config.budgets.max_input_tokens,
-                    config.budgets.max_output_tokens,
-                )
-            except Exception as exc:
-                logger.warning("chat_handler: build_context failed: %s", exc)
-                brief_ctx = []
-
-            intent.payload["session_id"] = session_id
-            intent.payload["brief_context"] = brief_ctx
-
-            # Capture the user's actual request text for possible re-dispatch
-            # post-confirmation. For the redispatch path the payload already
-            # contains the confirmation-prefixed text; we want the *original*
-            # intent for context storage, but at this layer we just keep what
-            # claude_code sees so a subsequent confirmation re-fires the same
-            # text. The deferred intent stored here will be wrapped with the
-            # confirmation prefix on re-dispatch.
-            cto_request_text = intent.payload.get("text", "")
-
-            async for event in dispatcher.stream(intent, db):
-                etype = event.get("type")
-                if etype == "action":
-                    await ws_manager.send(session_id, {
-                        "event": "status",
-                        "data": event.get("text", ""),
-                    })
-                elif etype == "done":
-                    response_text = event.get("text", "")
-                elif etype == "error_escalation":
-                    response_text = event.get("content", "An error occurred.")
-                elif etype in ("confirmation_needed", "ask"):
-                    content = event.get("content", "")
-                    options = event.get("options", {})
-                    ctx_payload = json.dumps({
-                        "prompt": content,
-                        "deferred_intent": {
-                            "kind": "code",
-                            "text": cto_request_text,
-                        },
-                    })
-                    try:
-                        await escalation.create(
-                            db, session_id, channel, options, ctx_payload
-                        )
-                    except Exception as exc:
-                        logger.error("chat_handler: escalation.create failed: %s", exc)
-                    response_text = content
-                if etype in ("done", "error_escalation", "confirmation_needed", "ask"):
-                    break
-        else:
-            try:
-                messages = await build_context(
-                    db,
-                    session_id,
-                    config.budgets.max_input_tokens,
-                    config.budgets.max_output_tokens,
-                )
-            except Exception as exc:
-                logger.warning("chat_handler: build_context failed: %s", exc)
-                messages = [{"role": "user", "content": text}]
-
-            if not messages:
-                messages = [{"role": "user", "content": text}]
-
-            intent.payload["messages"] = messages
-            intent.payload["max_tokens"] = config.budgets.max_output_tokens
-            intent.payload["model"] = config.models.pa_chat
-            intent.payload["system"] = pa_system_prompt
-            intent.payload["session_id"] = session_id
-            summary = session.get("summary_anchor")
-            if summary:
-                intent.payload["summary_anchor"] = summary
-
-            result = await dispatcher.dispatch(intent, db)
-            if result.ok:
-                response_text = result.data or ""
-                if result.cost_usd:
-                    await store.increment_session_cost(db, session_id, result.cost_usd)
-            else:
-                err = result.error
-                response_text = f"Sorry, hit an error: {err.message if err else 'unknown'}"
-
-        # 10. Format
-        formatted = _format_response(current_mode, response_text, mode_msg)
-
-        # 11. Save assistant message
-        try:
-            assistant_tokens = count_tokens(response_text)
-        except Exception:
-            assistant_tokens = max(1, len(response_text) // 4)
-        await store.add_message(db, session_id, "assistant", response_text, assistant_tokens)
-
-        # 12. Slide/summarise — best effort, don't let failures bubble
-        async def _safe_summarise():
-            try:
-                await slide_and_summarise(db, session_id, summarize_model=config.models.summarize)
-            except Exception as exc:
-                logger.warning("chat_handler: slide_and_summarise failed: %s", exc)
-
-        asyncio.create_task(_safe_summarise())
-
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        return {
-            "response": formatted,
-            "mode": current_mode.value,
-            "cost_usd": 0.0,
-            "latency_ms": latency_ms,
-        }
 
     return chat_handler
 
@@ -429,6 +117,12 @@ async def lifespan(app: FastAPI):
     brave_search = BraveSearchAdapter()
     file_read = FileReadAdapter()
     file_write = FileWriteAdapter()
+    try:
+        pa_groq = PAGroqAdapter(db=db)
+    except Exception as exc:
+        logger.warning("PAGroqAdapter init failed (GROQ_API_KEY missing?): %s", exc)
+        pa_groq = None
+    pa_haiku = PAHaikuAdapter(db=db)
 
     @asynccontextmanager
     async def db_getter():
@@ -468,6 +162,16 @@ async def lifespan(app: FastAPI):
     app.state.spawner = spawner
     app.state.bot = bot
     app.state.pa_system_prompt = pa_system_prompt
+    app.state.pa_groq = pa_groq
+    app.state.pa_haiku = pa_haiku
+
+    maker_main.bind(maker_main.MakerContext(
+        db=db,
+        dispatcher=dispatcher,
+        pa_groq=pa_groq,
+        pa_haiku=pa_haiku,
+        spawner=spawner,
+    ))
 
     await spawner.start_reaper()
     consumer_task = asyncio.create_task(
@@ -507,6 +211,8 @@ async def lifespan(app: FastAPI):
             await db.close()
         except Exception as exc:
             logger.warning("db close failed: %s", exc)
+
+        maker_main._reset()
 
 
 # ---------------------------------------------------------------------------

@@ -43,6 +43,12 @@ def test_caller_values():
     assert Caller.JOB_RUNNER == "job_runner"
 
 
+def test_caller_enum_maker():
+    assert Caller.MAKER == "maker"
+    assert Caller("maker") is Caller.MAKER
+    assert "maker" in [c.value for c in Caller]
+
+
 def test_error_code_all_values():
     for code in ("TIMEOUT", "RATE_LIMIT", "TOOL_ERROR", "QUOTA",
                  "BAD_INPUT", "UNAUTHORIZED", "INTERNAL"):

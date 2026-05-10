@@ -24,6 +24,7 @@ class Caller(StrEnum):
     PA = "pa"
     CTO_SUBAGENT = "cto_subagent"
     JOB_RUNNER = "job_runner"
+    MAKER = "maker"
 
 
 class ErrorCode(StrEnum):
@@ -47,6 +48,7 @@ class EventKind(StrEnum):
     JOB_COMPLETE = "job_complete"
     JOB_PROGRESS = "job_progress"
     ESCALATION_EXPIRED = "escalation_expired"
+    SYSTEM_MESSAGE = "system_message"
 
 
 class ErrorDetail(BaseModel):
@@ -128,6 +130,7 @@ class Event(BaseModel):
     created_at: str
     delivered: bool = False
     delivered_at: str | None = None
+    message_type: str | None = None
 
 
 class AdapterParam(BaseModel):
@@ -139,3 +142,14 @@ class AdapterParam(BaseModel):
 class AdapterManifest(BaseModel):
     required: list[AdapterParam] = Field(default_factory=list)
     optional: list[AdapterParam] = Field(default_factory=list)
+
+
+class CostLedgerRow(BaseModel):
+    id: int | None = None
+    session_id: str | None = None
+    job_id: str | None = None
+    adapter: str
+    tokens: int = 0
+    cost_usd: float = 0.0
+    tier: str = ""
+    timestamp: str
