@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\Mini_PC\\\\_REPO\\\\.claude\\\\commands\" -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"OK\")"
+    ]
+  }
+}

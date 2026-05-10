@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+aiosqlite
+sqlalchemy
+anthropic
+python-telegram-bot>=21
+httpx
+pydantic>=2
+pyyaml
+watchdog
+apscheduler==3.10.*
+pytest
+pytest-asyncio
