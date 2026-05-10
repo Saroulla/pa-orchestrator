@@ -26,26 +26,26 @@
 | Step | Name | Model | Wave | Depends On | Status |
 |------|------|-------|------|------------|--------|
 | 0 | Prerequisites | Haiku | W0 | — | todo |
-| 1 | Repo skeleton | Haiku | W1 | 0 | todo |
-| 2 | Core models | Sonnet | W2 | 1 | todo |
-| 3 | YAML guardrails + hot-reload | Sonnet | W2 | 1 | todo |
-| 4 | SQLite store | Sonnet | W3 | 2 | todo |
-| 5 | Token counting + history | Sonnet | W4 | 4 | todo |
-| 6 | Intent parser + Mode FSM | Sonnet | W3 | 2 | todo |
-| 7 | Escalation engine | Sonnet | W4 | 4 | todo |
-| 8 | Proxy dispatcher | Sonnet | W4 | 3, 5, 6 | todo |
-| 9a | ClaudeAPIAdapter | Opus | W5 | 8, 5 | todo |
-| 9b | ClaudeCodeAdapter | Opus | W7 | 10 | todo |
-| 9c | BraveSearchAdapter | Sonnet | W5 | 8 | todo |
-| 9d | FileReadAdapter | Sonnet | W5 | 8 | todo |
-| 9e | FileWriteAdapter | Sonnet | W5 | 8 | todo |
-| 10 | Spawner + reaper + brief generator | Opus | W6 | 9a | todo |
-| 11 | FastAPI main | Opus | W8 | 9b, 9a, 9c, 9d, 9e, 6, 7, 12 | todo |
-| 12 | Telegram connector | Sonnet | W4 | 4 | todo |
-| 13 | PA CLAUDE.md wiring | Sonnet | W8 | 11 | todo |
-| 14 | Web UI | Sonnet | W2 | 1 | todo |
-| 15 | Cloudflare Tunnel | Haiku | W9 | 11 | todo |
-| 16 | E2E gate test | Opus | W10 | 15 | todo |
+| 1 | Repo skeleton | Haiku | W1 | 0 | done |
+| 2 | Core models | Sonnet | W2 | 1 | done |
+| 3 | YAML guardrails + hot-reload | Sonnet | W2 | 1 | done |
+| 4 | SQLite store | Sonnet | W3 | 2 | done |
+| 5 | Token counting + history | Sonnet | W4 | 4 | done |
+| 6 | Intent parser + Mode FSM | Sonnet | W3 | 2 | done |
+| 7 | Escalation engine | Sonnet | W4 | 4 | done |
+| 8 | Proxy dispatcher | Sonnet | W4 | 3, 5, 6 | done |
+| 9a | ClaudeAPIAdapter | Opus | W5 | 8, 5 | done |
+| 9b | ClaudeCodeAdapter | Opus | W7 | 10 | done |
+| 9c | BraveSearchAdapter | Sonnet | W5 | 8 | done |
+| 9d | FileReadAdapter | Sonnet | W5 | 8 | done |
+| 9e | FileWriteAdapter | Sonnet | W5 | 8 | done |
+| 10 | Spawner + reaper + brief generator | Opus | W6 | 9a | done |
+| 11 | FastAPI main | Opus | W8 | 9b, 9a, 9c, 9d, 9e, 6, 7, 12 | done |
+| 12 | Telegram connector | Sonnet | W4 | 4 | done |
+| 13 | PA CLAUDE.md wiring | Sonnet | W8 | 11 | done |
+| 14 | Web UI | Sonnet | W2 | 1 | done |
+| 15 | Cloudflare Tunnel | Haiku | W9 | 11 | done |
+| 16 | E2E gate test | Opus | W10 | 15 | done |
 
 ---
 
@@ -53,15 +53,15 @@
 
 | Step | Name | Model | Wave | Depends On | Status |
 |------|------|-------|------|------------|--------|
-| 17 | Scheduler subprocess | Sonnet | W11 | 16 | todo |
-| 18 | Job runner | Sonnet | W11 | 16 | todo |
-| 19 | PA plan-author flow + @rebuild-plan | Sonnet | W12 | 17, 18 | todo |
-| 20 | PlaywrightAdapter | Sonnet | W11 | 16 | todo |
-| 21 | PDFExtractAdapter | Sonnet | W11 | 16 | todo |
-| 22 | EmailAdapter | Sonnet | W11 | 16 | todo |
-| 23 | TemplateAdapter | Sonnet | W11 | 16 | todo |
-| 24 | Async job notification | Sonnet | W12 | 17, 18 | todo |
-| 25 | Interest profile read/update flow | Sonnet | W12 | 19 | todo |
+| 17 | Scheduler subprocess | Sonnet | W11 | 16 | done |
+| 18 | Job runner | Sonnet | W11 | 16 | done |
+| 19 | PA plan-author flow + @rebuild-plan | Sonnet | W12 | 17, 18 | done |
+| 20 | PlaywrightAdapter | Sonnet | W11 | 16 | done |
+| 21 | PDFExtractAdapter | Sonnet | W11 | 16 | done |
+| 22 | EmailAdapter | Sonnet | W11 | 16 | done |
+| 23 | TemplateAdapter | Sonnet | W11 | 16 | done |
+| 24 | Async job notification | Sonnet | W12 | 17, 18 | done |
+| 25 | Interest profile read/update flow | Sonnet | W12 | 19 | done |
 
 ---
 

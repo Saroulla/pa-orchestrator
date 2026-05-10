@@ -1,0 +1,7 @@
+# HN Digest — {{ today }}
+
+{% for item in items %}
+{{ loop.index }}. [{{ item.title }}]({{ item.url }})
+{% endfor %}
+
+Generated: {{ now }}

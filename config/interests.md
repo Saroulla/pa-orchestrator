@@ -1,2 +1,4 @@
-<!-- Phase 1.2 — User interest profile. PA writes here via FileWriteAdapter. -->
-<!-- Step 25 implements the read/update flow. -->
+# Interest Profile
+
+<!-- PA reads this file as context for all responses.
+     Add entries manually or use @remember <topic> in chat. -->

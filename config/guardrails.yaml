@@ -1,2 +1,63 @@
-# Step 3 (Sonnet, Wave W2) fills this file with the full guardrails spec.
-# See CLAUDE.md § YAML Guardrails for the required schema.
+models:
+  pa_chat: "claude-haiku-4-5-20251001"
+  summarize: "claude-haiku-4-5-20251001"
+  cto_brief: "claude-sonnet-4-6"
+  plan_author: "claude-sonnet-4-6"
+
+failure_policy:
+  defaults:
+    timeout: retry_2x_then_escalate
+    rate_limit: queue_request
+    tool_error: log_and_escalate
+    quota: log_and_escalate
+    bad_input: log_and_escalate
+  by_intent:
+    code:   { timeout: retry_1x_then_escalate }
+    search: { tool_error: fail_silent }
+
+retry:
+  backoff_base_ms: 500
+  backoff_factor: 2.0
+  max_attempts: 3
+
+budgets:
+  per_session_usd_per_day: 5.00
+  max_input_tokens: 12000
+  max_output_tokens: 4000
+  hard_kill_on_breach: true
+
+escalation:
+  default_ttl_seconds: 600
+  on_expiry: skip
+  on_non_matching_reply: cancel_and_passthrough
+
+tool_access:
+  claude_api:   enabled
+  claude_code:  enabled
+  brave_search: enabled
+  file_read:    enabled
+  file_write:   enabled
+  playwright:   phase_1_2
+  pdf_extract:  phase_1_2
+  email_send:   phase_1_2
+  template:     phase_1_2
+
+file_write:
+  max_bytes: 10485760
+  enabled_for: [pa, cto_subagent, job_runner]
+
+context_switch:
+  pa_to_cto:     allowed
+  cto_to_pa:     allowed
+  pa_to_desktop: stub_only
+
+sub_agent:
+  hard_cap_concurrent: 2
+  idle_kill_minutes: 15
+  workspace_size_mb: 500
+
+logging:
+  destination: file
+  path: logs/audit.jsonl
+  rotate_mb: 100
+  user_visible: false

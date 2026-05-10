@@ -1,5 +1,7 @@
 fastapi
+python-dotenv
 uvicorn[standard]
+itsdangerous
 aiosqlite
 sqlalchemy
 anthropic
@@ -9,5 +11,9 @@ pydantic>=2
 pyyaml
 watchdog
 apscheduler==3.10.*
+playwright
 pytest
 pytest-asyncio
+pymupdf
+aiosmtplib
+jinja2
