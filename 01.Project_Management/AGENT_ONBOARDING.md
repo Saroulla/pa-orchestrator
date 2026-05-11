@@ -1,18 +1,20 @@
 # AGENT_ONBOARDING — Cold-Start Guide
 
 > Read this end-to-end if it's your first time on this repo. ~5 minute read. Everything you need to ship a MAKER build step is linked from here.
+>
+> **All four coordination docs live in `01.Project_Management/`:** this file, `BUILD_STATUS.md`, `MAKER_spec.md`, `MAKER_build.md`. Code lives at the repo root under `orchestrator/`, `tests/`, `config/`, `web-ui/`. Run all PowerShell commands from the repo root (`C:\Users\Mini_PC\pa-orchestrator\`).
 
 ---
 
 ## What You're Here To Do
 
-You're working on the PA Orchestrator MVP. The critical-path module is **MAKER**, an iterative goal-execution engine wrapping PowerShell. You've been assigned a step from `BUILD_STATUS.md`. Your job is to claim that step, build it per `01.Project_Management/MAKER_build.md`, run its gate, and mark it done. Nothing else.
+You're working on the PA Orchestrator MVP. The critical-path module is **MAKER**, an iterative goal-execution engine wrapping PowerShell. You've been assigned a step from `01.Project_Management/BUILD_STATUS.md`. Your job is to claim that step, build it per `01.Project_Management/MAKER_build.md`, run its gate, and mark it done. Nothing else.
 
 ---
 
 ## Prerequisite (Manual, Not A Build Step)
 
-**Before any MAKER work, the CTO/spawner pattern must be removed from the repo.** This is not tracked in `BUILD_STATUS.md` and is not claimable as a step. It must be completed manually before M0 can pass.
+**Before any MAKER work, the CTO/spawner pattern must be removed from the repo.** This is not tracked in `01.Project_Management/BUILD_STATUS.md` and is not claimable as a step. It must be completed manually before M0 can pass.
 
 Required deletions and edits:
 
@@ -32,10 +34,10 @@ Required deletions and edits:
 
 ## Read These In Order (5 min)
 
-1. **`CLAUDE.md`** — global constraints (Windows process model, 1 uvicorn worker, no Docker/Redis, SQLite WAL, $5/day cost cap, file-write scoping). Note: this file still describes the legacy PA+CTO pattern in places; those sections are obsolete after the prerequisite above, but the binding constraints listed in this sentence all still hold.
+1. **`/CLAUDE.md`** (repo root) — global constraints (Windows process model, 1 uvicorn worker, no Docker/Redis, SQLite WAL, $5/day cost cap, file-write scoping). Note: this file still describes the legacy PA+CTO pattern in places; those sections are obsolete after the prerequisite above, but the binding constraints listed in this sentence all still hold.
 2. **`01.Project_Management/Project_Vision.md`** — architecture (PA Haiku → MAKER → Workers → Synthesis). Skip the RAG-specific sections; they describe a prior design.
 3. **`01.Project_Management/MAKER_spec.md`** — authoritative iterative-goal MAKER spec. This is where the design lives.
-4. **`BUILD_STATUS.md`** — find your step and confirm its status is `todo` and all its dependencies are `done`.
+4. **`01.Project_Management/BUILD_STATUS.md`** — find your step and confirm its status is `todo` and all its dependencies are `done`.
 5. **`01.Project_Management/MAKER_build.md`** — read the card for **your step only**. It contains the interface contract, files to touch, and the gate table.
 
 > **Deprecated:** `01.Project_Management/Execution_Plan.md` describes an earlier RAG-first MAKER design that has been superseded. Do not consult it.
@@ -69,15 +71,15 @@ Required deletions and edits:
 
 This mirrors `.claude/commands/build-step.md` so agents not invoking the `/build-step` skill still follow the same flow.
 
-1. **Read `BUILD_STATUS.md`.** Find the row for your step.
+1. **Read `01.Project_Management/BUILD_STATUS.md`.** Find the row for your step.
    - If it shows `done`: stop and tell the user.
    - If it shows `in_progress`: stop and tell the user (do not duplicate work).
    - If it shows `todo` but any dependency is not `done`: stop and name the missing dependency rows.
    - If `todo` and all dependencies `done`: continue.
-2. **Claim the row.** Edit `BUILD_STATUS.md` and change `todo` → `in_progress | YYYY-MM-DD HH:MM` for your row only.
+2. **Claim the row.** Edit `01.Project_Management/BUILD_STATUS.md` and change `todo` → `in_progress | YYYY-MM-DD HH:MM` for your row only.
 3. **Build the step** per `01.Project_Management/MAKER_build.md` § Step M\<N\>. Follow the interface contract exactly. Do not add features, error handling, or abstractions beyond what the card specifies.
 4. **Run the gate table** in the card. Every row must pass. If any row fails, fix the implementation — do not edit the gate.
-5. **Mark `done`.** Edit `BUILD_STATUS.md` and change `in_progress | ...` → `done` for your row only. Tell the user the step is complete.
+5. **Mark `done`.** Edit `01.Project_Management/BUILD_STATUS.md` and change `in_progress | ...` → `done` for your row only. Tell the user the step is complete.
 
 ---
 
@@ -94,4 +96,4 @@ This mirrors `.claude/commands/build-step.md` so agents not invoking the `/build
 
 ## When You Finish
 
-Edit `BUILD_STATUS.md`, change `in_progress | ...` → `done` for your row, and tell the user the step is complete.
+Edit `01.Project_Management/BUILD_STATUS.md`, change `in_progress | ...` → `done` for your row, and tell the user the step is complete.

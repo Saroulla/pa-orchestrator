@@ -1,6 +1,6 @@
 # MAKER_build — Per-Step Build Cards
 
-> One card per row in `BUILD_STATUS.md` § Phase 2 — MAKER. Read **only the card for your step**. The card has everything you need; consult `MAKER_spec.md` only for the spec details the card explicitly references.
+> One card per row in `BUILD_STATUS.md` (same directory) § Phase 2 — MAKER. Read **only the card for your step**. The card has everything you need; consult `MAKER_spec.md` (same directory) only for the spec details the card explicitly references.
 >
 > Gate-table conventions (same as `.claude/commands/build-step.md` Phase 3):
 > - Commands run from `C:\Users\Mini_PC\pa-orchestrator\` unless stated.
@@ -13,7 +13,7 @@
 
 ### Step M0 — Pre-flight verification
 **Model:** Haiku
-**Depends on:** — (manual CTO removal prerequisite must be complete; see `AGENT_ONBOARDING.md` § Prerequisite)
+**Depends on:** — (manual CTO removal prerequisite must be complete; see `AGENT_ONBOARDING.md` (same directory) § Prerequisite)
 **Files created/modified:** none (investigation only)
 **Interface contract:** none — produce a verification report.
 **Spec reference:** none (prereq is documented in `AGENT_ONBOARDING.md`)

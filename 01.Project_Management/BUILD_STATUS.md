@@ -2,6 +2,8 @@
 
 > **Agent coordination file.** Read this before touching any code.
 > This file is the single source of truth for what is built, what is in progress, and what is blocked.
+>
+> **Location:** `01.Project_Management/BUILD_STATUS.md` (alongside `AGENT_ONBOARDING.md`, `MAKER_spec.md`, `MAKER_build.md`).
 
 ---
 
@@ -29,7 +31,7 @@ Before M0, the CTO/spawner pattern must be removed manually. This work is **out 
 
 ## Phase 2 — MAKER (Active)
 
-MAKER is an iterative goal-execution engine wrapping PowerShell: `Decide (Sonnet) → Execute (PowerShell) → Analyze (Haiku ×5) → Synthesize (Sonnet)`, capped at 10 iterations. Full spec at `01.Project_Management/MAKER_spec.md`. Per-step contracts at `01.Project_Management/MAKER_build.md`.
+MAKER is an iterative goal-execution engine wrapping PowerShell: `Decide (Sonnet) → Execute (PowerShell) → Analyze (Haiku ×5) → Synthesize (Sonnet)`, capped at 10 iterations. Full spec at `MAKER_spec.md` (same directory). Per-step contracts at `MAKER_build.md` (same directory).
 
 | Step | Name | Model | Wave | Depends On | Status |
 |------|------|-------|------|------------|--------|

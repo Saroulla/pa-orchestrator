@@ -8,15 +8,15 @@ Implement one numbered step from the build sequence.
 
 ## Phase 0 — Status Check (do this before anything else)
 
-1. Read `BUILD_STATUS.md` at the repo root.
+1. Read `01.Project_Management/BUILD_STATUS.md`.
 2. Find the row for step N. Apply this decision table exactly:
 
 | Row shows | What to do |
 |-----------|-----------|
-| `done` | **Stop.** Tell the user: "Step N is already marked done in BUILD_STATUS.md." Ask what to do next. |
+| `done` | **Stop.** Tell the user: "Step N is already marked done in 01.Project_Management/BUILD_STATUS.md." Ask what to do next. |
 | `in_progress` | **Stop.** Tell the user: "Step N is already claimed by another agent (claimed: [timestamp]). Do not duplicate work." |
 | `todo` and any dependency not `done` | **Stop.** Tell the user exactly which dependencies are not done and which wave they belong to. |
-| `todo` and all dependencies `done` | **Claim it.** Edit `BUILD_STATUS.md`: change `todo` → `in_progress \| YYYY-MM-DD HH:MM` for step N only. Then continue to Phase 1. |
+| `todo` and all dependencies `done` | **Claim it.** Edit `01.Project_Management/BUILD_STATUS.md`: change `todo` → `in_progress \| YYYY-MM-DD HH:MM` for step N only. Then continue to Phase 1. |
 
 3. Read step N from `01.Project_Management/build.md` in full.
 4. Read any spec files referenced by that step (e.g. `security-model.md`, `sub-agent-pattern.md`, `escalation-model.md`).
@@ -78,8 +78,8 @@ Gate status: PENDING — run the table above and confirm all rows pass.
 ```
 
 **When the user confirms all rows pass:**
-Edit `BUILD_STATUS.md` — change the step N row from `in_progress | ...` → `done`.
-Then tell the user: "Step N marked done in BUILD_STATUS.md. Next available steps: [list steps whose dependencies are now all done]."
+Edit `01.Project_Management/BUILD_STATUS.md` — change the step N row from `in_progress | ...` → `done`.
+Then tell the user: "Step N marked done in 01.Project_Management/BUILD_STATUS.md. Next available steps: [list steps whose dependencies are now all done]."
 
 Do not mark done until the user explicitly confirms the gate passes.
 
