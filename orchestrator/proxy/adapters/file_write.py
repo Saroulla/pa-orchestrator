@@ -48,7 +48,7 @@ def _compute_allowed_roots(caller: Caller, scope_id: str | None) -> list[Path]:
             roots.append(sessions_root / scope_id / "workspace")
         return roots
 
-    if caller in (Caller.CTO_SUBAGENT, Caller.JOB_RUNNER):
+    if caller == Caller.JOB_RUNNER:
         if not scope_id:
             raise PermissionError(f"{caller} requires a session_id/job_id scope")
         _validate_session_id(scope_id)
@@ -114,7 +114,7 @@ def _write_atomic(target: Path, content: bytes) -> None:
 
 class FileWriteAdapter:
     name = "file_write"
-    allowed_callers = {Caller.PA, Caller.CTO_SUBAGENT, Caller.JOB_RUNNER}
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
 
     async def invoke(
         self,
@@ -137,8 +137,8 @@ class FileWriteAdapter:
                 ),
             )
 
-        # ── 2. scope_id required for CTO / JOB callers ────────────────────
-        if caller in (Caller.CTO_SUBAGENT, Caller.JOB_RUNNER) and not scope_id:
+        # ── 2. scope_id required for JOB_RUNNER caller ────────────────────
+        if caller == Caller.JOB_RUNNER and not scope_id:
             return Result(
                 ok=False,
                 error=ErrorDetail(
@@ -235,8 +235,8 @@ class FileWriteAdapter:
                     name="session_id",
                     type="str",
                     description=(
-                        "Caller session/job id — required for CTO_SUBAGENT and "
-                        "JOB_RUNNER; optional for PA (grants access to its workspace)"
+                        "Session/job id scope — required for JOB_RUNNER; "
+                        "optional for PA (grants access to its workspace)"
                     ),
                 ),
             ],

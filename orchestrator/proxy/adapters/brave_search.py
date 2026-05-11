@@ -15,7 +15,7 @@ from orchestrator.models import (
 
 class BraveSearchAdapter:
     name = "brave_search"
-    allowed_callers = {Caller.PA, Caller.CTO_SUBAGENT, Caller.JOB_RUNNER}
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
     _URL = "https://api.search.brave.com/res/v1/web/search"
 
     async def invoke(

@@ -5,7 +5,6 @@ from orchestrator.models import Caller, Intent, Mode
 
 _MODE_KIND: dict[Mode, str] = {
     Mode.PA: "reason",
-    Mode.CTO: "code",
     Mode.DESKTOP: "reason",
 }
 
@@ -39,10 +38,6 @@ def parse(
 
     elif first == "@PA":
         kind = "reason"
-        payload = {"text": remainder}
-
-    elif first == "@CTO":
-        kind = "code"
         payload = {"text": remainder}
 
     elif first == "@Desktop":

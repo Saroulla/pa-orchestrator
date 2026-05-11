@@ -26,7 +26,7 @@ _SESSIONS_DIR = _REPO_ROOT / "sessions"
 
 class PlaywrightWebAdapter:
     name = "playwright_web"
-    allowed_callers = {Caller.PA, Caller.CTO_SUBAGENT, Caller.JOB_RUNNER}
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
 
     async def invoke(
         self,

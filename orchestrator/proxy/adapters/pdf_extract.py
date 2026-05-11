@@ -15,7 +15,7 @@ from orchestrator.models import (
 
 class PDFExtractAdapter:
     name = "pdf_extract"
-    allowed_callers = {Caller.PA, Caller.CTO_SUBAGENT, Caller.JOB_RUNNER}
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
 
     async def invoke(
         self,

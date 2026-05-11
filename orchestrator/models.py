@@ -11,7 +11,6 @@ SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
 
 class Mode(StrEnum):
     PA = "PA"
-    CTO = "CTO"
     DESKTOP = "DESKTOP"
 
 
@@ -22,7 +21,6 @@ class Channel(StrEnum):
 
 class Caller(StrEnum):
     PA = "pa"
-    CTO_SUBAGENT = "cto_subagent"
     JOB_RUNNER = "job_runner"
 
 

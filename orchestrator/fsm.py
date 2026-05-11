@@ -29,13 +29,5 @@ def transition(
     if intent_kind == "desktop":
         return (Mode.DESKTOP, "Coming in Phase 1.2.")
 
-    # @CTO from PA → enter CTO mode.
-    if intent_kind == "code" and current_mode == Mode.PA:
-        return (Mode.CTO, "Switched to CTO mode.")
-
-    # @PA from CTO → return to PA.
-    if intent_kind == "reason" and current_mode == Mode.CTO:
-        return (Mode.PA, "Switched to PA mode.")
-
     # All remaining cases are no-ops (e.g. @PA while already in PA).
     return (current_mode, None)

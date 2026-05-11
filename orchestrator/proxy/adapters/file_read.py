@@ -19,7 +19,7 @@ REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
 
 class FileReadAdapter:
     name = "file_read"
-    allowed_callers = {Caller.PA, Caller.CTO_SUBAGENT, Caller.JOB_RUNNER}
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
     MAX_READ_BYTES = 52_428_800  # 50 MB
 
     def __init__(self, repo_root: Path = REPO_ROOT) -> None:
@@ -30,11 +30,6 @@ class FileReadAdapter:
 
     def _roots_for(self, caller: Caller, session_id: str | None) -> list[Path]:
         """Return the list of allowed read roots for this caller."""
-        if caller == Caller.CTO_SUBAGENT:
-            if not session_id:
-                raise ValueError("CTO_SUBAGENT caller requires 'session_id' in payload")
-            # CTO may only read within its own session workspace.
-            return [self._repo_root / "sessions" / session_id / "workspace"]
         # PA and JOB_RUNNER share the same broad read roots.
         return [
             self._repo_root / "config",
@@ -140,7 +135,7 @@ class FileReadAdapter:
                 AdapterParam(
                     name="session_id",
                     type="str",
-                    description="Required when caller is CTO_SUBAGENT; scopes read root to that session's workspace",
+                    description="Session/job workspace context (reserved for future use)",
                 ),
             ],
         )
