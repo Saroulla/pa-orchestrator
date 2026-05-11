@@ -1,6 +1,6 @@
-# Project Vision: PA Orchestrator (RAG-First MVP)
+# Project Vision: PA Orchestrator (PowerShell Iterative MVP)
 
-> Authoritative architectural vision. Aligns implementation roadmap with user intent. Supersedes earlier adapter-map framing.
+> Authoritative architectural vision. Aligns implementation roadmap with user intent. Updated 2026-05-11.
 
 ---
 
@@ -8,94 +8,189 @@
 
 **PA Orchestrator** is a two-tier intelligence system for a single user on a personal mini PC:
 
-- **Tier 1 (Workers):** Many parallel cheap agents (Haiku) process documents, extract facts, run commands
-- **Tier 2 (Evaluator):** One expensive agent (Sonnet/Opus) synthesizes worker outputs into coherent answers, reports, decisions
+- **Execution Canvas:** PowerShell executes all mini PC operations (internet, simulations, local tasks)
+- **Intelligence Layer:** PA + MAKER + Worker-Hierarchy orchestrate and interpret PowerShell execution
+- **Pattern:** Iterative goal execution (decide → execute → analyze → decide next step)
 
-**Pattern:** Map (cheap workers) → Reduce (expensive synthesis) → Intelligence
-
-**Cost Model:** Haiku parallelism drives down per-query cost; Sonnet synthesis ensures quality and coherence.
+**Vision:** Everything centralized through PowerShell. AI guides execution iteratively. Results RAGged for history queries.
 
 ---
 
-## Phase 1 MVP: RAG Knowledge Base
+## Phase 1 MVP: PowerShell Iterative Automation
 
 ### The Use Case
 
-User uploads large PDFs, articles, HTML, or Google-scraped content on a subject. PA system:
+User gives PA a goal (e.g., "Run daily simulations," "Check inbox and organize," "Monitor system health"). PA system:
 
-1. **Ingests** — Chunks text into overlapping 500-token segments
-2. **Embeds** — Converts segments to vectors (Voyage AI)
-3. **Stores** — Caches embeddings per-session in memory (ephemeral, not persistent)
-4. **Retrieves** — On user query, embeds query → cosine similarity search → top-K chunks
-5. **Synthesizes** — Spawns parallel Haiku workers to extract answers from each chunk → single Sonnet call to weave answers into coherent response
+1. **Understands Goal** — Parse user intent into executable steps
+2. **Decides First Action** — Sonnet: "Given goal, what should PowerShell do first?"
+3. **Executes** — MAKER spawns PowerShell script, captures stdout/stderr/exit code
+4. **Analyzes** — Haiku workers extract insights from results (5 parallel)
+5. **Interprets** — Sonnet: "What does this result mean? Goal achieved? Need more steps?"
+6. **Decides Next Action** — If goal not achieved, loop back to step 2
+7. **Reports** — After goal completion (or max iterations): provide summary + all results
 
 ### Key Architecture
 
-- **Per-Session Ephemeral Storage** — Knowledge base lives only for current session; discarded on logout/session end
-- **NumPy In-Memory Vectors** — No external vector DB (Chroma, Pinecone, etc.). Session-scoped, local cosine similarity
-- **Async Parallel Execution** — `asyncio.gather()` for concurrent worker calls
-- **Worker Hierarchy** — Haiku as knowledge extractors (fast, cheap, parallel); Sonnet as synthesis expert (quality, single-call)
+- **Iterative Loop** — Execute → analyze → decide → repeat until goal achieved
+- **Stateful Execution** — Track goal, completed steps, current result, iteration count
+- **Safety Limits** — Max 10 iterations per goal; escalate to user on max reached
+- **PowerShell is the Canvas** — All mini PC operations (internet fetch, file ops, simulations, system commands) via PowerShell
+- **Worker Hierarchy** — Haiku workers analyze results in parallel; Sonnet synthesizes and decides next action
+- **Zero External Apps** — Everything centralized; no Playwright, no separate email/calendar tools, no external integrations
+
+### Example Flow: Daily Simulations Goal
+
+```
+User: "Run daily simulations and give me a summary"
+↓
+ITERATION 1:
+  - Sonnet decides: "Check for input data first"
+  - Execute PS: Get-ChildItem C:\simulations\input\
+  - Analyze: "Input data exists, 5 files ready"
+  - Sonnet: "Good. Next: run simulation script."
+↓
+ITERATION 2:
+  - Execute PS: & C:\simulations\run-sim.ps1
+  - Capture: stdout (1000 lines of metrics), exit code 0
+  - Analyze (5 Haiku workers parallel):
+    - Worker 1: "Extract runtime metrics"
+    - Worker 2: "Extract success rate"
+    - Worker 3: "Extract anomalies"
+    - Worker 4: "Extract resource usage"
+    - Worker 5: "Extract comparison to baseline"
+  - Sonnet synthesizes: "Simulations complete. 95% success, runtime 2.3hrs, 3 anomalies detected."
+  - Sonnet decides: "Goal achieved."
+↓
+FINAL RESPONSE:
+  "Simulations complete. 95% success rate. Runtime 2.3 hours.
+   Anomalies detected in [3 areas]. See detailed results [below]."
+```
+
+**Cost per goal:** ~3 iterations × (5 Haiku = 0.01¢ + 1 Sonnet decision = 0.02¢) = ~0.10¢. Scales infinitely for <$1/day.
+
+### Execution Workflow (Detailed)
+
+```python
+async def execute_goal_iteratively(user_intent: str, session_id: str):
+    state = {
+        "goal": user_intent,
+        "steps": [],
+        "max_iterations": 10,
+        "current_iteration": 0
+    }
+    
+    while state["current_iteration"] < state["max_iterations"]:
+        # STEP 1: Decide what PowerShell should do next
+        next_action = await sonnet_adapter.invoke({
+            "prompt": f"Goal: {state['goal']}\n\nCompleted steps: {state['steps']}\n\nWhat should PowerShell do next? Be specific and terse.",
+            "session_id": session_id
+        })
+        
+        # STEP 2: Execute PowerShell
+        ps_result = await powershell_adapter.invoke({
+            "script": next_action,
+            "timeout_s": 300
+        })
+        
+        # STEP 3: Analyze result (parallel Haiku workers)
+        worker_tasks = []
+        for i in range(5):
+            task = haiku_adapter.invoke({
+                "prompt": f"Goal: {state['goal']}\n\nPowerShell output:\n{ps_result['stdout']}\n\nAnalyze aspect {i}: [specific focus]",
+                "session_id": session_id
+            })
+            worker_tasks.append(task)
+        
+        worker_outputs = await asyncio.gather(*worker_tasks)
+        
+        # STEP 4: Synthesize and decide
+        synthesis = await sonnet_adapter.invoke({
+            "prompt": f"Goal: {state['goal']}\n\nPowerShell output:\n{ps_result['stdout']}\n\nWorker insights:\n{[w for w in worker_outputs]}\n\nIs the goal achieved? What should we do next?",
+            "session_id": session_id
+        })
+        
+        # STEP 5: Store step and check goal
+        state["steps"].append({
+            "iteration": state["current_iteration"],
+            "action": next_action,
+            "ps_output": ps_result,
+            "worker_insights": worker_outputs,
+            "synthesis": synthesis
+        })
+        
+        state["current_iteration"] += 1
+        
+        # STEP 6: Exit condition
+        if "goal achieved" in synthesis.lower() or "complete" in synthesis.lower():
+            break
+    
+    return {
+        "final_response": synthesis,
+        "steps": state["steps"],
+        "iterations": state["current_iteration"],
+        "success": state["current_iteration"] < state["max_iterations"]
+    }
+```
+
+---
+
+## Phase 1.5: RAG PowerShell Execution History
+
+### The Use Case (Post-MVP)
+
+User queries the history of what PowerShell has done:
+- "What did the system do yesterday?"
+- "Show me all simulation runs and their metrics"
+- "What anomalies were detected this week?"
+
+PA system:
+1. **Chunks PowerShell Results** — Each iteration's output → overlapping segments
+2. **Embeds** — Voyage AI vectors (1024-dim)
+3. **Stores** — Per-session in-memory vector store
+4. **Retrieves** — User query → embedding → cosine similarity → top-K results
+5. **Synthesizes** — Sonnet weaves chunks into coherent historical narrative
 
 ### Example Flow
 
 ```
-User: "What does this PDF say about machine learning?"
+User: "What happened with the simulations?"
 ↓
-PA retrieves top-5 relevant chunks via cosine similarity
+PA embeds query
 ↓
-PA spawns 5 parallel Haiku calls:
-  Worker 1: "Extract ML insights from chunk 1"
-  Worker 2: "Extract ML insights from chunk 2"
-  ...
-  Worker 5: "Extract ML insights from chunk 5"
+PA retrieves top-5 relevant chunks from PowerShell history
 ↓
-PA gathers all 5 results
+PA spawns 5 Haiku workers: "Extract key fact from this chunk"
 ↓
-PA makes 1 Sonnet call: "Synthesize these 5 extracts into a coherent answer"
+PA calls Sonnet: "Synthesize simulation history"
 ↓
-Response returned to user
+Response: "Simulations ran 3 times. First run: 95% success. Second run: 98% success. Detected memory leak in iteration 2. Fixed in iteration 3."
 ```
 
-**Cost:** ~5 Haiku calls (~0.01¢) + 1 Sonnet call (~0.04¢) = ~0.05¢ per query. Scales to hundreds of queries per session for $1-2 total.
+**Key:** RAG is not a separate knowledge base. It's the queryable history of PowerShell execution.
 
 ---
 
-## Phase 2: PowerShell Orchestration & Automation
+## Architectural Principles
 
-### The Use Case
+1. **PowerShell as Execution Canvas** — Everything mini PC does flows through PowerShell
+2. **Iterative Goal Execution** — Goals loop until achieved; max 10 iterations for safety
+3. **Cheap Workers, Expensive Synthesizers** — Haiku parallel analysis; Sonnet decisions
+4. **Centralized Intelligence** — PA + MAKER + Workers handle all orchestration
+5. **Zero External Apps** — No Playwright, no email SDKs, no separate tools
+6. **Deterministic MAKER** — Execution is purely logical; no LLM calls per step (only synthesis)
+7. **Queryable History** — All PowerShell results RAGged for later queries
+8. **Cost Capped** — Hard kill on $5/day; per-query budgets enforced
 
-User needs mini PC to run simulations, execute commands, manage tasks autonomously. PA system:
+---
 
-1. **Executes** — Spawns PowerShell scripts via MAKER executor
-2. **Monitors** — Captures stdout/logs from command execution
-3. **Analyzes** — Spawns parallel Haiku workers to interpret results (simulations, errors, metrics)
-4. **Synthesizes** — Single Sonnet call to produce daily report, update files, prepare findings
-5. **Feeds Back** — Results stored, queryable like knowledge base chunks
+## Phases Summary
 
-### Key Architecture
-
-- Same worker-hierarchy pattern as RAG
-- MAKER executor is deterministic (no LLM per job run)
-- Results stored in session context or persistent job log
-- Optional: feed PowerShell results + interpretations back into RAG for combined analysis
-
-### Example Flow
-
-```
-User: "Run simulation, analyze results, prepare report"
-↓
-MAKER executes: powershell -File C:\simulations\run.ps1
-↓
-Captures stdout → 50 pages of metrics
-↓
-PA retrieves relevant sections (sampling or chunking)
-↓
-PA spawns parallel Haiku workers to interpret metrics
-↓
-PA makes 1 Sonnet call: "Synthesize analysis into daily report"
-↓
-Sonnet writes results to C:\reports\daily.md
-```
+| Phase | Focus | Canvas | Worker Count | Cost |
+|-------|-------|--------|--------------|------|
+| **Phase 1 (MVP)** | Iterative PowerShell automation | PowerShell | 5 Haiku + 1 Sonnet per iteration | ~$0.10 per goal |
+| **Phase 1.5** | RAG PowerShell history | Vector store | 5 Haiku + 1 Sonnet per query | ~$0.05 per query |
+| **Phase 2+** | Extended automation (calendar, git, email via PS) | PowerShell | Same | Same |
 
 ---
 

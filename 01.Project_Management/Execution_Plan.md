@@ -1,22 +1,25 @@
-# Execution Plan: PA Orchestrator MVP (RAG-First)
+# Execution Plan: PA Orchestrator MVP (PowerShell Iterative)
 
-> Step-by-step implementation roadmap for local agent. Each phase has clear objectives, handover prompts, and success criteria.
+> Step-by-step implementation roadmap for PowerShell-first MVP. Each phase has clear objectives, handover prompts, and success criteria.
 
 ---
 
 ## Overview
 
-**Total Phases:** 6  
-**Blocking Dependencies:** Phase 0 → Phase 1 → Phases 2-3 → Phase 4 → Phase 5 → Phase 6
+**Total Phases:** 7 (0-6)  
+**MVP Gate:** Phase 6 (full iterative goal execution)  
+**Phase 1.5:** RAG PowerShell history (post-MVP, before Phase 2)
+
+**Blocking Dependencies:** Phase 0 → Phase 1 → Phases 2-3 → Phase 4 → Phase 5 → Phase 6 → Phase 1.5
 
 **Estimated Timeline:**
 - Phase 0 (Verification): 30 min (local machine)
 - Phase 1-3 (Cleanup): 2-3 hours
-- Phase 4 (RAG Build): 4-6 hours
-- Phase 5 (Integration): 2-3 hours
-- Phase 6 (PowerShell): 3-4 hours
-
-**Total: ~1-2 working days for MVP gate**
+- Phase 4 (PowerShell Adapter): 2-3 hours
+- Phase 5 (Iterative Loop): 4-6 hours
+- Phase 6 (E2E MVP Gate): 2-3 hours
+- **Total to MVP: ~1-2 working days**
+- Phase 1.5 (RAG): 3-4 hours (post-MVP)
 
 ---
 
@@ -24,11 +27,6 @@
 
 ### Objective
 Confirm actual codebase state. Identify gaps between BUILD_STATUS claims and real code.
-
-### Why It's Blocking
-- Phases 1-3 assume we know what exists
-- Previous sessions may have created/deleted files; BUILD_STATUS may be stale
-- Must have ground truth before proceeding
 
 ### Handover Prompt for Local Agent
 
@@ -53,32 +51,28 @@ Run this on your local machine and report findings:
    echo "START SUCCESS" || echo "START FAILED"
    → Can the app start without errors?
 
-6. grep "def invoke" orchestrator/maker/executor.py 2>/dev/null || echo "NOT FOUND"
-   → Is MAKER executor present?
+6. grep "async def invoke" orchestrator/proxy/adapters/*.py | grep -c "def invoke"
+   → How many adapters have invoke methods?
 
-7. grep -c "class.*Tool" orchestrator/proxy/protocol.py
-   → How many Tool protocol classes defined?
-
-8. git log --oneline -3
+7. git log --oneline -3
    → Last 3 commits (for context)
+
+8. find orchestrator -name "*.py" | wc -l
+   → Total Python files in orchestrator/
 
 Report each result back in order.
 ```
 
 ### Success Criteria
 
-After running commands, local agent reports:
-- Actual file counts in maker/ and config/maker/
-- Adapter inventory (which ones exist)
+Local agent reports:
+- File counts in maker/ and config/maker/
+- Adapter inventory
 - App startup success/failure
-- MAKER executor presence
+- Total invoke methods
 - Last 3 commits
 
-**If maker/ is mostly empty or missing:** Phase 1-3 can proceed; Phase 4 will rebuild it  
-**If app won't start:** Diagnose before moving forward (likely missing imports or bad config)
-
-### Commit Template
-(No commit needed for Phase 0 — pure investigation)
+**Result determines whether Phase 3 creates MAKER from scratch or recovers existing code.**
 
 ---
 
@@ -87,85 +81,29 @@ After running commands, local agent reports:
 ### Objective
 Delete spawner pattern and CTO mode. Simplify to PA + MAKER only.
 
-### Why This Phase First
-- Spawner is dead code (user has Claude Code on iOS instead)
-- Safe deletion — no dependencies on it
-- Clears confusion about what PA does vs what spawner does
-- Must complete before Phase 3 (MAKER recovery)
-
 ### Components to Delete
 
 #### 1. spawner.py (Entire File)
 ```bash
 rm orchestrator/spawner.py
 ```
-- 300+ lines of subprocess logic
-- NOT referenced by PA dispatcher after this phase
 
 #### 2. claude_code.py (Entire File)
 ```bash
 rm orchestrator/proxy/adapters/claude_code.py
 ```
-- NDJSON envelope wrapper
-- References spawner
-- Will be replaced by MAKER's deterministic executor
 
 #### 3. models.py — Remove Caller enum value
-**Before:**
-```python
-class Caller(StrEnum):
-    PA = "pa"
-    CTO_SUBAGENT = "cto_subagent"
-    JOB_RUNNER = "job_runner"
-```
-
-**After:**
-```python
-class Caller(StrEnum):
-    PA = "pa"
-    JOB_RUNNER = "job_runner"
-```
+Remove: `CTO_SUBAGENT = "cto_subagent"`
 
 #### 4. parser.py — Remove @CTO command
-**Before:**
-```python
-@commands = {
-    "CTO": "switch_mode:cto",
-    "PA": "switch_mode:pa",
-    ...
-}
-```
-
-**After:**
-```python
-@commands = {
-    "PA": "switch_mode:pa",
-    ...
-}
-```
+Remove the "CTO" entry from @commands dictionary
 
 #### 5. fsm.py — Simplify Mode FSM
-**Before:**
-```
-PA ──@CTO──▶ CTO ──@PA──▶ PA
-PA ──@Desktop──▶ DESKTOP_STUB ──(any input)──▶ PA
-```
-
-**After:**
-```
-PA ──@Desktop──▶ DESKTOP_STUB ──(any input)──▶ PA
-(CTO mode removed entirely)
-```
-
-**Changes:**
-- Remove `CTO` from `Mode` enum
-- Remove `CTO` transitions
-- Keep `PA` and `DESKTOP_STUB` only
+Remove `Mode.CTO` and all CTO transitions. Keep only PA ↔ PA and PA ↔ DESKTOP_STUB.
 
 #### 6. proxy/dispatcher.py — Remove CTO routing
-Search for any references to `CTO_SUBAGENT` or `claude_code`:
-- Remove routing rules for CTO mode
-- Simplify allowed_callers sets
+Delete any routing rules for `CTO_SUBAGENT` or `claude_code`.
 
 ### Handover Prompt for Local Agent
 
@@ -178,54 +116,47 @@ Goal: Delete CTO spawner pattern safely.
 
 2. In models.py:
    - Find class Caller(StrEnum)
-   - Delete the line: CTO_SUBAGENT = "cto_subagent"
+   - Delete: CTO_SUBAGENT = "cto_subagent"
    - Save
 
 3. In parser.py:
-   - Find the @commands dictionary
-   - Delete or comment out the "CTO" entry
+   - Find @commands dictionary
+   - Delete the "CTO" entry
    - Save
 
 4. In fsm.py:
    - Find Mode enum
    - Remove Mode.CTO if present
-   - Find mode transitions
-   - Delete any transition involving CTO
-   - Leave PA ↔ PA and PA ↔ DESKTOP_STUB only
+   - Delete any CTO transitions
+   - Keep PA ↔ PA and PA ↔ DESKTOP_STUB only
    - Save
 
 5. In proxy/dispatcher.py:
    - Search for "CTO_SUBAGENT" or "claude_code"
-   - Delete any routing rules that mention CTO
+   - Delete any routing rules
    - Save
 
 6. Test startup:
    python -m orchestrator.main &
    sleep 3
    kill %1
-   echo "SUCCESS" if no import errors, "FAILED" otherwise
+   → Should succeed without import errors
 
-7. Create commit:
+7. Verify:
+   grep -r "CTO_SUBAGENT" orchestrator/ 2>/dev/null | wc -l
+   → Should be 0
+
+8. Create commit:
    git add -A
    git commit -m "Remove CTO spawner pattern; simplify to PA + MAKER only"
 ```
 
 ### Success Criteria
 - ✅ No import errors on app startup
-- ✅ `@CTO` command is unrecognized (returns "Unknown command")
-- ✅ grep for "CTO_SUBAGENT" returns 0 results (except in comments)
+- ✅ `@CTO` command is unrecognized
+- ✅ grep for "CTO_SUBAGENT" returns 0 results
 - ✅ spawner.py and claude_code.py deleted
 - ✅ Commit pushed to branch
-
-### Files Modified
-- `orchestrator/models.py`
-- `orchestrator/parser.py`
-- `orchestrator/fsm.py`
-- `orchestrator/proxy/dispatcher.py`
-
-### Files Deleted
-- `orchestrator/spawner.py`
-- `orchestrator/proxy/adapters/claude_code.py`
 
 ---
 
@@ -233,12 +164,6 @@ Goal: Delete CTO spawner pattern safely.
 
 ### Objective
 Move experimental code out of main flow. Preserve for post-MVP trial.
-
-### Why This Phase
-- Groq is not part of MVP (PA uses Haiku always)
-- User wants to trial Groq post-MVP, so don't delete
-- Sidelining keeps main codebase clean
-- Zero risk — pure file moves
 
 ### Steps
 
@@ -252,41 +177,34 @@ mkdir -p experiments/
 mv orchestrator/proxy/adapters/pa_groq.py experiments/pa_groq.py
 ```
 
-#### 3. Remove Groq from Dispatcher Routing
-**In orchestrator/proxy/dispatcher.py:**
-- Search for any conditional on `groq` or `pa_groq`
-- Delete those routing rules
-- Ensure PA always routes to Haiku (pa_haiku.py)
-
-#### 4. Keep promotion.py for Later
-- Do NOT delete (user wants to trial post-MVP)
-- Leave in place; it's not loaded unless explicitly called
+#### 3. Remove Groq from Dispatcher
+In `orchestrator/proxy/dispatcher.py`, delete any routing rules for Groq.
 
 ### Handover Prompt for Local Agent
 
 ```
 Goal: Move Groq experiments to experiments/ directory.
 
-1. Create experiments directory:
+1. Create:
    mkdir -p experiments/
 
-2. Move adapter:
+2. Move:
    mv orchestrator/proxy/adapters/pa_groq.py experiments/pa_groq.py
 
 3. In orchestrator/proxy/dispatcher.py:
-   - Search for "groq" or "pa_groq" or "Groq"
-   - Delete any routing rules that mention Groq
-   - Ensure PA always routes to Haiku
+   - Search for "groq" or "pa_groq"
+   - Delete any routing rules
+   - Save
 
-4. Test:
-   grep -r "pa_groq" orchestrator/ 2>/dev/null
-   → Should return 0 results
+4. Verify:
+   grep -r "pa_groq" orchestrator/ 2>/dev/null | wc -l
+   → Should be 0
 
-5. Verify startup:
+5. Test startup:
    python -m orchestrator.main &
    sleep 3
    kill %1
-   → Should start clean
+   → Should start cleanly
 
 6. Create commit:
    git add -A
@@ -296,15 +214,9 @@ Goal: Move Groq experiments to experiments/ directory.
 ### Success Criteria
 - ✅ `experiments/pa_groq.py` exists
 - ✅ `orchestrator/proxy/adapters/pa_groq.py` deleted
-- ✅ No references to groq in main orchestrator code
+- ✅ No references to groq in main code
 - ✅ App starts
-- ✅ Commit pushed to branch
-
-### Files Moved
-- `orchestrator/proxy/adapters/pa_groq.py` → `experiments/pa_groq.py`
-
-### Files Modified
-- `orchestrator/proxy/dispatcher.py`
+- ✅ Commit pushed
 
 ---
 
@@ -312,11 +224,6 @@ Goal: Move Groq experiments to experiments/ directory.
 
 ### Objective
 Ensure MAKER executor framework exists and is wired correctly.
-
-### Why This Phase
-- MAKER is core to MVP (RAG, PowerShell, job execution)
-- Phase 4 builds RAG components inside MAKER
-- Must have foundation in place before RAG work starts
 
 ### If orchestrator/maker/ Exists and Has Files
 
@@ -327,19 +234,7 @@ python -c "from orchestrator.maker.executor import MAKERExecutor; print('OK')"
 
 **If OK:** Proceed to Phase 4
 
-**If ImportError:** Handover to local agent with diagnostic:
-```
-The maker/ module exists but has import errors. Likely:
-1. Missing __init__.py files
-2. Circular imports
-3. Missing dependencies in requirements.txt
-
-Commands to diagnose:
-  python -m py_compile orchestrator/maker/__init__.py
-  python -m py_compile orchestrator/maker/executor.py
-  
-Report errors back; we'll fix before Phase 4.
-```
+**If ImportError:** Diagnose and fix before Phase 4
 
 ### If orchestrator/maker/ Is Empty or Missing
 
@@ -349,134 +244,84 @@ mkdir -p orchestrator/maker/
 touch orchestrator/maker/__init__.py
 ```
 
-Create skeleton files for Phase 4 to build into:
+**Create skeleton files:**
 
 **orchestrator/maker/__init__.py:**
 ```python
-"""MAKER: Deterministic execution layer for RAG, PowerShell, jobs."""
+"""MAKER: Deterministic execution layer for PowerShell, RAG, jobs."""
 
 from .executor import MAKERExecutor
+from .iterative_goal import IterativeGoalExecutor
 
-__all__ = ["MAKERExecutor"]
+__all__ = ["MAKERExecutor", "IterativeGoalExecutor"]
 ```
 
 **orchestrator/maker/executor.py:**
 ```python
-"""MAKER executor: deterministic job runner, no LLM calls."""
+"""MAKER executor: deterministic execution, no LLM calls per step."""
 
 from dataclasses import dataclass
-from typing import Any, List
-import asyncio
+from typing import Any
 
 
 @dataclass
-class JobResult:
+class ExecutionResult:
     ok: bool
-    data: Any | None
+    stdout: str
+    stderr: str
+    exit_code: int
     error: str | None
 
 
 class MAKERExecutor:
-    """Deterministic executor for chunks, PowerShell, retrieval."""
+    """Execute deterministic operations (PowerShell, retrieval, etc)."""
     
-    async def execute(self, job_kind: str, params: dict) -> JobResult:
-        """Execute a deterministic job.
-        
-        job_kind: "chunk" | "retrieve" | "powershell" | "embed"
-        params: dict with job-specific parameters
-        
-        Returns JobResult.
-        """
-        match job_kind:
-            case "chunk":
-                return await self.chunk_text(params)
-            case "retrieve":
-                return await self.retrieve(params)
-            case "powershell":
-                return await self.run_powershell(params)
-            case "embed":
-                return await self.embed_text(params)
-            case _:
-                return JobResult(False, None, f"Unknown job kind: {job_kind}")
+    async def execute_powershell(self, script: str, timeout_s: int = 300) -> ExecutionResult:
+        """Execute PowerShell script, capture output."""
+        # Phase 4 implementation
+        return ExecutionResult(True, "", "", 0, None)
     
-    async def chunk_text(self, params: dict) -> JobResult:
+    async def chunk_text(self, text: str) -> list[str]:
         """Chunk text into overlapping segments."""
-        # Phase 4 implementation
-        return JobResult(True, {"chunks": []}, None)
+        # Phase 1.5 implementation
+        return []
     
-    async def retrieve(self, params: dict) -> JobResult:
-        """Retrieve top-K chunks by cosine similarity."""
-        # Phase 4 implementation
-        return JobResult(True, {"chunks": []}, None)
-    
-    async def run_powershell(self, params: dict) -> JobResult:
-        """Execute PowerShell script."""
-        # Phase 2 implementation
-        return JobResult(True, {}, None)
-    
-    async def embed_text(self, params: dict) -> JobResult:
+    async def embed_text(self, text: str) -> list[float]:
         """Embed text via Voyage API."""
-        # Phase 4 implementation
-        return JobResult(True, {"embedding": []}, None)
+        # Phase 1.5 implementation
+        return []
 ```
 
-**orchestrator/maker/chunker.py:**
+**orchestrator/maker/iterative_goal.py:**
 ```python
-"""Text chunking: split documents into overlapping 500-token segments."""
+"""Iterative goal execution: decide → execute → analyze → repeat."""
 
-# Phase 4 implementation
-
-
-def chunk_text(text: str, chunk_size_tokens: int = 500, overlap_tokens: int = 50) -> list[str]:
-    """Split text into overlapping chunks."""
-    # To implement: split by sentence/word boundary, maintain overlap
-    pass
-```
-
-**orchestrator/maker/vector_store.py:**
-```python
-"""In-memory per-session vector storage (NumPy)."""
-
-# Phase 4 implementation
+from dataclasses import dataclass, field
+from typing import Any
 
 
-class VectorStore:
-    """Per-session ephemeral vector store."""
+@dataclass
+class GoalState:
+    goal: str
+    steps: list = field(default_factory=list)
+    current_iteration: int = 0
+    max_iterations: int = 10
+
+
+class IterativeGoalExecutor:
+    """Execute user goals iteratively until complete."""
     
-    def __init__(self, session_id: str):
-        self.session_id = session_id
-        self.chunks = []  # list of text chunks
-        self.embeddings = None  # numpy array, shape (N, 1024)
-        self.metadata = {}  # chunk metadata
-    
-    def add(self, chunks: list[str], embeddings: list[list[float]]) -> None:
-        """Add chunks and embeddings to store."""
+    async def execute_goal(
+        self,
+        user_intent: str,
+        session_id: str,
+        sonnet_adapter,
+        powershell_adapter,
+        haiku_adapter
+    ) -> dict:
+        """Execute goal iteratively until achieved or max iterations."""
+        # Phase 5 implementation
         pass
-    
-    def retrieve(self, query_embedding: list[float], top_k: int = 5) -> list[str]:
-        """Retrieve top-K chunks by cosine similarity."""
-        pass
-    
-    def clear(self) -> None:
-        """Discard all chunks (on session end)."""
-        pass
-```
-
-**orchestrator/maker/retrieval.py:**
-```python
-"""Retrieve relevant chunks from vector store."""
-
-# Phase 4 implementation
-
-
-async def retrieve_chunks(
-    query: str,
-    vector_store,
-    embedding_adapter,
-    top_k: int = 5
-) -> list[str]:
-    """Embed query, search vector store, return top-K chunks."""
-    pass
 ```
 
 ### Handover Prompt for Local Agent
@@ -488,760 +333,611 @@ Goal: Ensure MAKER module structure exists.
    ls -la orchestrator/maker/ 2>/dev/null || echo "MISSING"
 
 2. If it exists and has files:
-   - Run: python -c "from orchestrator.maker.executor import MAKERExecutor; print('OK')"
-   - If OK: Report "MAKER module imports successfully"
-   - If error: Report the error; I'll fix before Phase 4
+   python -c "from orchestrator.maker.executor import MAKERExecutor; print('OK')"
+   → If OK: proceed to Phase 4
+   → If error: report the error
 
-3. If it's missing or empty:
-   - Create: mkdir -p orchestrator/maker/
-   - Create: touch orchestrator/maker/__init__.py
+3. If missing or empty:
+   mkdir -p orchestrator/maker/
+   touch orchestrator/maker/__init__.py
    
-   Then, create these skeleton files with the content I provide:
+   Then create these skeleton files with the content I provide:
    - orchestrator/maker/executor.py
-   - orchestrator/maker/chunker.py
-   - orchestrator/maker/vector_store.py
-   - orchestrator/maker/retrieval.py
-   
-   (I'll paste the full content for each; copy exactly)
+   - orchestrator/maker/iterative_goal.py
 
 4. Verify:
    python -c "from orchestrator.maker.executor import MAKERExecutor; print('OK')"
    → Should print OK
 
-5. Create commit:
+5. Test startup:
+   python -m orchestrator.main &
+   sleep 3
+   kill %1
+   → Should start without import errors
+
+6. Create commit:
    git add orchestrator/maker/
-   git commit -m "Create MAKER module structure for RAG/PowerShell execution"
+   git commit -m "Create MAKER module structure for iterative goal execution"
 ```
 
 ### Success Criteria
 - ✅ `orchestrator/maker/__init__.py` exists
-- ✅ `orchestrator/maker/executor.py` exists with MAKERExecutor class
-- ✅ Chunker, vector_store, retrieval skeleton files present
-- ✅ `from orchestrator.maker.executor import MAKERExecutor` works
-- ✅ App starts without import errors
-- ✅ Commit pushed to branch
-
-### Files Created (if missing)
-- `orchestrator/maker/__init__.py`
-- `orchestrator/maker/executor.py`
-- `orchestrator/maker/chunker.py`
-- `orchestrator/maker/vector_store.py`
-- `orchestrator/maker/retrieval.py`
+- ✅ `orchestrator/maker/executor.py` exists with MAKERExecutor
+- ✅ `orchestrator/maker/iterative_goal.py` exists with IterativeGoalExecutor
+- ✅ Imports work without errors
+- ✅ App starts cleanly
+- ✅ Commit pushed
 
 ---
 
-## Phase 4: Build RAG Components (Core MVP)
+## Phase 4: PowerShell Adapter (Core MVP)
 
 ### Objective
-Implement RAG pipeline: chunking → embedding → retrieval → map-reduce synthesis
+Build the execution canvas: reliable PowerShell script execution with output capture.
 
-### Key Milestones
-
-#### 4.1: Text Chunking
-**File:** `orchestrator/maker/chunker.py`
+### File: `orchestrator/proxy/adapters/powershell.py` (NEW)
 
 **Spec:**
-- Input: raw text (string)
-- Output: list of overlapping 500-token segments
-- Overlap: 50 tokens (context preservation across chunks)
-- Boundary: split on sentence or word boundary, not mid-word
-- Tokenizer: anthropic `count_tokens` for accurate counts
+- Input: PowerShell script or command string
+- Output: stdout, stderr, exit code
+- Timeout: configurable (default 300s)
+- Error handling: capture exceptions, timeout kills process
+- Windows-native: use `subprocess.Popen`
 
 **Interface:**
 ```python
-async def chunk_text(
-    text: str,
-    chunk_size_tokens: int = 500,
-    overlap_tokens: int = 50,
-    anthropic_client = None
-) -> list[str]:
-    """Split text into overlapping chunks.
+class PowerShellAdapter(Tool):
+    name = "powershell"
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER, Caller.MAKER}
     
-    Returns: list of chunk strings, each ~500 tokens.
-    """
-```
-
-**Handover Prompt:**
-```
-Implement text chunking in orchestrator/maker/chunker.py.
-
-Spec:
-- Read: raw document text (PDF extracted or HTML)
-- Split: on sentence boundaries (use NLTK or regex)
-- Size: ~500 tokens per chunk (use anthropic.count_tokens)
-- Overlap: 50 tokens between consecutive chunks
-- Output: list[str]
-
-Algorithm sketch:
-  1. Split text by sentence (use sent_tokenizer from nltk or similar)
-  2. Group sentences into chunks, accumulating token count
-  3. When reaching ~500 tokens, finalize chunk
-  4. Overlap: include last 50 tokens of previous chunk in next
-  5. Return list of chunks
-
-Test:
-  text = "Long document..."
-  chunks = chunk_text(text)
-  → Print number of chunks and first chunk length
-  → Verify chunks overlap (last sentences of chunk N appear in chunk N+1)
-
-Create commit: git add orchestrator/maker/chunker.py && git commit -m "Implement text chunking (500-token overlapping segments)"
-```
-
----
-
-#### 4.2: Embedding Adapter (Voyage AI)
-**File:** `orchestrator/proxy/adapters/voyage_embed.py` (NEW)
-
-**Spec:**
-- API: Voyage AI embeddings API (1024-dimensional vectors)
-- Input: list of text chunks
-- Output: list[list[float]] (vectors)
-- Caching: per-session (keyed by session_id)
-- Error handling: retry on rate limit, escalate on quota
-
-**Interface:**
-```python
-class VoyageEmbeddingAdapter(Tool):
-    name = "voyage_embed"
-    
-    async def invoke(
-        self,
-        payload: dict,
-        deadline_s: float,
-        caller: Caller
-    ) -> Result:
+    async def invoke(self, payload: dict, deadline_s: float, caller: Caller) -> Result:
         """
         payload: {
-            "texts": list[str],
-            "session_id": str
+            "script": str,  # PowerShell code to execute
+            "timeout_s": int  # timeout (default 300)
         }
         
-        Returns: {
-            "embeddings": list[list[float]],  # shape (N, 1024)
-            "cache_hits": int,
-            "api_calls": int
+        Returns: Result with data = {
+            "stdout": str,
+            "stderr": str,
+            "exit_code": int
         }
         """
 ```
 
-**Handover Prompt:**
+**Implementation Details:**
+- Use `subprocess.Popen` with `stdout=PIPE, stderr=PIPE`
+- Wrap with `asyncio.wait_for()` for timeout
+- On timeout: `proc.terminate()` → wait 5s → `proc.kill()`
+- Capture all output; strip sensitive patterns (if any)
+- Return exit code even on error
+
+**Error Handling:**
+- Timeout → `Result(ok=False, error="Timeout after Xs")`
+- Bad script syntax → `Result(ok=True, data={..., exit_code=1}, error=stderr)`
+- Process killed → `Result(ok=False, error="Process killed")`
+
+### Handover Prompt for Local Agent
+
 ```
-Implement Voyage AI embedding adapter in orchestrator/proxy/adapters/voyage_embed.py.
+Goal: Build PowerShell adapter for MVP execution canvas.
 
 Requirements:
-- API: https://api.voyageai.com/v1/embeddings (use your API key from .env)
-- Model: voyage-3-large (1024 dimensions)
-- Input: list of text strings (chunks)
-- Output: list of vectors (embeddings)
-- Cache: per-session in memory (dict: session_id -> {text -> embedding})
-- Batch: if >100 texts, split into multiple API calls
-- Error handling: retry on 429 (rate limit), escalate on 401/403/500
+- Execute PowerShell script or command
+- Capture stdout, stderr, exit code
+- Timeout support (default 300s, kill on breach)
+- Windows native subprocess
+
+File: orchestrator/proxy/adapters/powershell.py
 
 Template structure:
-class VoyageEmbeddingAdapter(Tool):
-    name = "voyage_embed"
-    allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
-    
-    def __init__(self):
-        self.api_key = os.getenv("VOYAGE_API_KEY")
-        self.base_url = "https://api.voyageai.com/v1"
-        self.cache = {}  # session_id -> {text -> embedding}
+class PowerShellAdapter(Tool):
+    name = "powershell"
+    allowed_callers = {Caller.PA, Caller.JOB_RUNNER, Caller.MAKER}
     
     async def invoke(self, payload, deadline_s, caller):
-        texts = payload["texts"]
-        session_id = payload["session_id"]
+        script = payload["script"]
+        timeout_s = payload.get("timeout_s", 300)
         
-        # Check cache first
-        embeddings = []
-        uncached_texts = []
-        cache_hits = 0
+        try:
+            # Use subprocess.Popen with PowerShell
+            proc = subprocess.Popen(
+                ["powershell", "-Command", script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP  # Windows
+            )
+            
+            # Wrap with asyncio.wait_for for timeout
+            loop = asyncio.get_event_loop()
+            stdout, stderr = await asyncio.wait_for(
+                loop.run_in_executor(None, proc.communicate),
+                timeout=timeout_s
+            )
+            
+            return Result(
+                ok=proc.returncode == 0,
+                data={
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exit_code": proc.returncode
+                },
+                error=None if proc.returncode == 0 else stderr,
+                cost_usd=0
+            )
         
-        for text in texts:
-            if session_id in self.cache and text in self.cache[session_id]:
-                embeddings.append(self.cache[session_id][text])
-                cache_hits += 1
-            else:
-                uncached_texts.append(text)
+        except asyncio.TimeoutError:
+            # Kill process on timeout
+            proc.terminate()
+            await asyncio.sleep(5)
+            if proc.poll() is None:
+                proc.kill()
+            
+            return Result(
+                ok=False,
+                data=None,
+                error=f"PowerShell timeout after {timeout_s}s",
+                cost_usd=0
+            )
         
-        # Call API for uncached
-        api_calls = 0
-        if uncached_texts:
-            api_calls = await self._call_voyage(uncached_texts, session_id)
-            # Update embeddings list in order
-            ...
-        
-        return Result(
-            ok=True,
-            data={
-                "embeddings": embeddings,
-                "cache_hits": cache_hits,
-                "api_calls": api_calls
-            },
-            ...
-        )
+        except Exception as e:
+            return Result(
+                ok=False,
+                data=None,
+                error=str(e),
+                cost_usd=0
+            )
 
 Test:
-  - Embed a sample chunk
-  - Verify shape: (1, 1024)
-  - Embed same chunk again; verify cache hit
-  - Embed different session; verify no cache sharing
-
-Create commit: git add orchestrator/proxy/adapters/voyage_embed.py && git commit -m "Add Voyage AI embedding adapter with per-session caching"
-```
-
----
-
-#### 4.3: Vector Store Implementation
-**File:** `orchestrator/maker/vector_store.py`
-
-**Spec:**
-- Per-session, in-memory ephemeral storage
-- Data: text chunks + embeddings (1024-dim numpy arrays)
-- Backend: numpy arrays for fast cosine similarity
-- Persistence: None (cleared on session end)
-- Metadata: chunk source (which PDF, which URL, etc.)
-
-**Interface:**
-```python
-class VectorStore:
-    def __init__(self, session_id: str):
-        self.session_id = session_id
-        self.chunks = []  # list[str]
-        self.embeddings = None  # numpy.ndarray, shape (N, 1024)
-        self.metadata = []  # list[dict] with source, page, etc.
-    
-    async def add(
-        self,
-        chunks: list[str],
-        embeddings: list[list[float]],
-        metadata: list[dict] = None
-    ) -> None:
-        """Add chunks and embeddings to store."""
-    
-    async def retrieve(
-        self,
-        query_embedding: list[float],
-        top_k: int = 5
-    ) -> list[dict]:
-        """Return top-K chunks by cosine similarity.
-        
-        Returns: [{"text": str, "score": float, "metadata": dict}, ...]
-        """
-    
-    def clear(self) -> None:
-        """Discard all data (on session end)."""
-```
-
-**Handover Prompt:**
-```
-Implement in-memory vector store in orchestrator/maker/vector_store.py.
-
-Requirements:
-- Store: chunks (strings) + embeddings (numpy arrays, 1024-dim)
-- Retrieve: cosine similarity search, return top-K
-- Session-scoped: ephemeral, cleared on session end
-- No persistence
-
-Use numpy.dot and numpy.linalg.norm for cosine similarity:
-  cos_sim = np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-Class structure:
-class VectorStore:
-    def __init__(self, session_id: str):
-        self.session_id = session_id
-        self.chunks = []
-        self.embeddings = None  # None until first add
-        self.metadata = []
-    
-    async def add(self, chunks, embeddings, metadata=None):
-        # Convert embeddings list to numpy array
-        # Append to self.chunks, extend self.embeddings, append metadata
-        # Handle first-time init of self.embeddings
-        
-    async def retrieve(self, query_embedding, top_k=5):
-        # Compute cosine similarity between query_embedding and all stored embeddings
-        # Sort by score descending
-        # Return top_k with text, score, metadata
-        
-    def clear(self):
-        self.chunks = []
-        self.embeddings = None
-        self.metadata = []
-
-Test:
-  store = VectorStore("session_123")
-  await store.add(["chunk1", "chunk2"], [[...1024...], [...1024...]])
-  results = await store.retrieve([...1024...], top_k=2)
-  → Should return 2 results with scores and metadata
-
-Create commit: git add orchestrator/maker/vector_store.py && git commit -m "Implement in-memory vector store with cosine similarity retrieval"
-```
-
----
-
-#### 4.4: Retrieval Pattern
-**File:** `orchestrator/maker/retrieval.py`
-
-**Spec:**
-- Input: user query (string)
-- Process: embed query → search vector store → return top-K chunks
-- Output: list of relevant chunks with scores
-
-**Interface:**
-```python
-async def retrieve_relevant_chunks(
-    query: str,
-    vector_store: VectorStore,
-    embedding_adapter,
-    top_k: int = 5
-) -> list[dict]:
-    """Embed query, search store, return top-K chunks.
-    
-    Returns: [{"text": str, "score": float, "metadata": dict}, ...]
-    """
-```
-
-**Handover Prompt:**
-```
-Implement retrieval in orchestrator/maker/retrieval.py.
-
-Algorithm:
-  1. Embed the query using embedding_adapter
-  2. Call vector_store.retrieve(query_embedding, top_k)
-  3. Return results (already ranked by cosine similarity)
-
-Function:
-async def retrieve_relevant_chunks(
-    query: str,
-    vector_store,
-    embedding_adapter,
-    top_k: int = 5
-) -> list[dict]:
-    # 1. Embed query
-    result = await embedding_adapter.invoke({
-        "texts": [query],
-        "session_id": vector_store.session_id
-    }, deadline_s=10, caller=Caller.PA)
-    
-    if not result.ok:
-        return []  # or raise
-    
-    query_embedding = result.data["embeddings"][0]
-    
-    # 2. Retrieve
-    chunks = await vector_store.retrieve(query_embedding, top_k)
-    
-    return chunks
-
-Test:
-  query = "What is machine learning?"
-  chunks = await retrieve_relevant_chunks(query, store, adapter, top_k=5)
-  → Should return 5 chunks related to ML
-  → Each chunk should have "text", "score", "metadata"
-
-Create commit: git add orchestrator/maker/retrieval.py && git commit -m "Implement query embedding and chunk retrieval pipeline"
-```
-
----
-
-#### 4.5: Map-Reduce Executor (Worker Parallelism + Synthesis)
-**File:** `orchestrator/maker/executor.py` (expand)
-
-**Spec:**
-- Input: relevant chunks + user question
-- Map: spawn N parallel Haiku calls (workers) to extract answer from each chunk
-- Reduce: gather results → single Sonnet call to synthesize final answer
-- Output: synthesized response + cost breakdown
-
-**Interface:**
-```python
-class MAKERExecutor:
-    async def map_reduce_synthesis(
-        self,
-        chunks: list[str],
-        question: str,
-        session_id: str,
-        haiku_adapter,
-        sonnet_adapter
-    ) -> dict:
-        """Map-reduce synthesis over retrieved chunks.
-        
-        Returns: {
-            "answer": str,
-            "worker_outputs": list[str],
-            "cost_usd": float,
-            "latency_ms": float
-        }
-        """
-```
-
-**Algorithm:**
-
-```python
-async def map_reduce_synthesis(
-    chunks: list[str],
-    question: str,
-    session_id: str,
-    haiku_adapter,
-    sonnet_adapter
-) -> dict:
-    
-    # PHASE 1: MAP (parallel Haiku workers)
-    import asyncio
-    import time
-    
-    start_time = time.time()
-    
-    worker_tasks = []
-    for i, chunk in enumerate(chunks):
-        task = haiku_adapter.invoke(
-            payload={
-                "prompt": f"Question: {question}\n\nChunk:\n{chunk}\n\nExtract a brief answer.",
-                "session_id": session_id
-            },
-            deadline_s=15,
-            caller=Caller.PA
-        )
-        worker_tasks.append(task)
-    
-    # Wait for all workers
-    worker_results = await asyncio.gather(*worker_tasks, return_exceptions=True)
-    
-    # Collect outputs
-    worker_outputs = []
-    worker_cost = 0
-    for result in worker_results:
-        if isinstance(result, Exception):
-            worker_outputs.append(f"Error: {result}")
-        elif result.ok:
-            worker_outputs.append(result.data.get("text", ""))
-            worker_cost += result.cost_usd
-        else:
-            worker_outputs.append(f"Error: {result.error}")
-    
-    # PHASE 2: REDUCE (single Sonnet call)
-    synthesis_prompt = f"""
-    Question: {question}
-    
-    Below are extracted insights from {len(chunks)} relevant chunks.
-    Synthesize these into a coherent, factual answer. If insights conflict, note it.
-    
-    Insights:
-    """ + "\n".join(f"- {out}" for out in worker_outputs)
-    
-    synthesis_result = await sonnet_adapter.invoke(
-        payload={
-            "prompt": synthesis_prompt,
-            "session_id": session_id
-        },
-        deadline_s=20,
-        caller=Caller.PA
-    )
-    
-    end_time = time.time()
-    
-    if not synthesis_result.ok:
-        return {
-            "answer": "Synthesis failed",
-            "worker_outputs": worker_outputs,
-            "cost_usd": worker_cost + synthesis_result.cost_usd,
-            "latency_ms": int((end_time - start_time) * 1000),
-            "error": synthesis_result.error
-        }
-    
-    return {
-        "answer": synthesis_result.data.get("text", ""),
-        "worker_outputs": worker_outputs,
-        "cost_usd": worker_cost + synthesis_result.cost_usd,
-        "latency_ms": int((end_time - start_time) * 1000)
-    }
-```
-
-**Handover Prompt:**
-```
-Implement map-reduce synthesis in orchestrator/maker/executor.py.
-
-Requirements:
-- MAP: spawn N parallel Haiku calls (one per chunk)
-  - Each Haiku extracts answer to question from its chunk
-  - Use asyncio.gather() for parallelism
+  1. Simple command: "Write-Output 'hello'"
+     → stdout should be "hello"
   
-- REDUCE: single Sonnet call
-  - Input: all N Haiku outputs
-  - Task: synthesize into coherent answer
-  - Output: final response
+  2. Exit code: "$LASTEXITCODE = 42; exit"
+     → exit_code should be 42
+  
+  3. Timeout: "Start-Sleep -Seconds 100" with timeout_s=2
+     → Should return error "Timeout after 2s"
 
-Spec details:
-- Haiku worker prompt: "Question: {question}\n\nChunk:\n{chunk}\n\nExtract answer."
-- Sonnet synthesize prompt: "Question: {question}\n\nInsights:\n[worker outputs]\n\nSynthesize into coherent answer."
-- Track cost_usd (sum of all worker + synthesizer costs)
-- Track latency_ms (total time from first worker spawn to synthesis done)
-- Return: {"answer": str, "worker_outputs": list[str], "cost_usd": float, "latency_ms": int}
-
-Test:
-  chunks = ["ML is...", "AI includes...", "Deep learning uses..."]
-  question = "What is machine learning?"
-  result = await executor.map_reduce_synthesis(chunks, question, "session_123", haiku, sonnet)
-  → result["answer"] should be coherent synthesis
-  → result["cost_usd"] should be >0
-  → result["worker_outputs"] should have 3 entries
-
-Create commit: git add orchestrator/maker/executor.py && git commit -m "Implement map-reduce synthesis (parallel Haiku workers + Sonnet synthesizer)"
+Create commit: git add orchestrator/proxy/adapters/powershell.py && git commit -m "Implement PowerShell adapter for iterative goal execution"
 ```
+
+### Success Criteria
+- ✅ PowerShell scripts execute
+- ✅ Stdout/stderr captured correctly
+- ✅ Exit codes returned accurately
+- ✅ Timeout + process kill works
+- ✅ Simple commands tested (Get-Date, Write-Output, etc.)
+- ✅ Error handling works
+- ✅ Commit pushed
 
 ---
 
-### Integration: Wiring RAG into PA Dispatcher
-
-**File:** `orchestrator/proxy/dispatcher.py`
-
-**Changes:**
-- Add route: when user asks question in RAG mode, dispatcher invokes:
-  1. Retrieve relevant chunks
-  2. Map-reduce synthesis
-  3. Return answer
-
-**Handover Prompt:**
-```
-In orchestrator/proxy/dispatcher.py, add a route for RAG queries:
-
-def should_use_rag(intent: Intent) -> bool:
-    # Check if session has an active knowledge base (vector store exists)
-    return intent.session_id in active_rag_sessions  # or similar flag
-
-async def dispatch(intent: Intent) -> Result:
-    # ... existing logic ...
-    
-    if should_use_rag(intent):
-        # 1. Retrieve chunks
-        chunks = await retrieve_relevant_chunks(
-            intent.payload["text"],
-            vector_store,
-            embedding_adapter,
-            top_k=5
-        )
-        
-        # 2. Map-reduce synthesis
-        result = await maker_executor.map_reduce_synthesis(
-            chunks,
-            intent.payload["text"],
-            intent.session_id,
-            haiku_adapter,
-            sonnet_adapter
-        )
-        
-        return Result(
-            ok=result.get("ok", True),
-            data={"text": result["answer"], "worker_count": len(chunks)},
-            cost_usd=result["cost_usd"],
-            meta={"latency_ms": result["latency_ms"]}
-        )
-    
-    # ... continue with existing dispatch logic ...
-```
-
----
-
-### Phase 4 Success Criteria
-
-- ✅ Chunker splits 10-page PDF into ~20 overlapping chunks
-- ✅ Embedding adapter returns (N, 1024) vectors via Voyage API
-- ✅ Vector store stores chunks + embeddings
-- ✅ Retrieval ranks chunks by cosine similarity
-- ✅ Map-reduce spawns 5 Haiku calls in parallel + 1 Sonnet synthesis
-- ✅ Full RAG loop: user question → retrieve → synthesize → answer (latency <10s)
-- ✅ Cost per query: <$0.10 (5x Haiku ~0.01¢ + 1x Sonnet ~0.04¢)
-- ✅ No import errors; app starts cleanly
-
----
-
-## Phase 5: Integration & E2E Test (MVP Gate)
+## Phase 5: Iterative Goal Executor (Core MVP Logic)
 
 ### Objective
-Verify full RAG workflow end-to-end.
+Build the iterative loop: decide → execute → analyze → decide next step → repeat until goal achieved.
 
-### Test Scenarios
+### File: `orchestrator/maker/iterative_goal.py` (EXPAND)
 
-#### Scenario 1: PDF Upload & Knowledge Base Initialization
-```
-User: Uploads 10-page PDF on "Machine Learning Basics"
-↓
-PA triggers chunking → embedding → storage
-↓
-Vector store contains ~20 chunks with embeddings
-↓
-Success: User sees confirmation message
-```
+**Core Algorithm:**
 
-#### Scenario 2: Question on Knowledge Base
-```
-User: "What is supervised learning?"
-↓
-PA retrieves top-5 relevant chunks
-↓
-PA spawns 5 Haiku workers to extract answers
-↓
-PA calls Sonnet to synthesize
-↓
-Response: Coherent answer covering supervised learning
-↓
-Success: Answer is accurate; latency <10s; cost <$0.10
-```
+```python
+async def execute_goal_iteratively(
+    user_intent: str,
+    session_id: str,
+    sonnet_adapter,
+    powershell_adapter,
+    haiku_adapter
+) -> dict:
+    """Execute a goal iteratively until achieved or max iterations reached."""
+    
+    state = {
+        "goal": user_intent,
+        "steps": [],
+        "max_iterations": 10,
+        "current_iteration": 0
+    }
+    
+    while state["current_iteration"] < state["max_iterations"]:
+        # PHASE 1: DECIDE NEXT ACTION
+        # Ask Sonnet: "Given goal and completed steps, what should PowerShell do next?"
+        
+        decision_prompt = f"""Goal: {state['goal']}
 
-#### Scenario 3: Multi-Turn Conversation
-```
-User Q1: "What is overfitting?"
-↓
-Response R1 (via RAG)
-↓
-User Q2: "How do you prevent it?"
-↓
-Response R2 (via RAG, same knowledge base)
-↓
-Success: R2 builds on R1; both are accurate
-```
+Completed steps so far:
+{format_steps(state['steps'])}
 
-#### Scenario 4: Telegram Channel
-```
-Same as Scenario 2, but via Telegram bot
-↓
-User sends message via Telegram
-↓
-PA processes, triggers RAG
-↓
-Response sent back via Telegram
-↓
-Success: Telegram round-trip works
+What should PowerShell execute next? Be specific and executable.
+Respond with ONLY the PowerShell command/script, no explanation."""
+        
+        decision = await sonnet_adapter.invoke({
+            "prompt": decision_prompt,
+            "session_id": session_id,
+            "max_tokens": 500
+        }, deadline_s=20, caller=Caller.MAKER)
+        
+        if not decision.ok:
+            return {
+                "success": False,
+                "error": f"Failed to decide next action: {decision.error}",
+                "steps": state["steps"]
+            }
+        
+        next_action = decision.data.get("text", "")
+        
+        # PHASE 2: EXECUTE POWERSHELL
+        ps_result = await powershell_adapter.invoke({
+            "script": next_action,
+            "timeout_s": 300
+        }, deadline_s=350, caller=Caller.MAKER)
+        
+        # PHASE 3: ANALYZE RESULT (Parallel Haiku Workers)
+        worker_tasks = []
+        analysis_focuses = [
+            "Extract key metrics and success indicators",
+            "Identify errors, warnings, or anomalies",
+            "Assess whether goal is progressing",
+            "Note resource usage (CPU, memory, time)",
+            "Summarize outcome and next logical step"
+        ]
+        
+        for focus in analysis_focuses:
+            prompt = f"""Goal: {state['goal']}
+
+PowerShell output:
+{ps_result.data['stdout']}
+
+stderr:
+{ps_result.data['stderr']}
+
+Analysis focus: {focus}
+
+Provide a brief, specific insight."""
+            
+            task = haiku_adapter.invoke({
+                "prompt": prompt,
+                "session_id": session_id,
+                "max_tokens": 200
+            }, deadline_s=15, caller=Caller.MAKER)
+            
+            worker_tasks.append(task)
+        
+        worker_results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+        
+        worker_insights = []
+        for result in worker_results:
+            if isinstance(result, Exception):
+                worker_insights.append(f"Error: {result}")
+            elif result.ok:
+                worker_insights.append(result.data.get("text", ""))
+            else:
+                worker_insights.append(f"Error: {result.error}")
+        
+        # PHASE 4: SYNTHESIZE AND DECIDE
+        synthesis_prompt = f"""Goal: {state['goal']}
+
+Completed steps:
+{format_steps(state['steps'])}
+
+Latest PowerShell execution:
+  Command: {next_action}
+  Exit code: {ps_result.data['exit_code']}
+  Output: {ps_result.data['stdout'][:1000]}
+
+Worker analysis:
+{format_insights(worker_insights)}
+
+Questions:
+1. Has the goal been achieved?
+2. Are there errors or blockers?
+3. If goal not achieved, what should we do next iteration?
+
+Respond concisely."""
+        
+        synthesis = await sonnet_adapter.invoke({
+            "prompt": synthesis_prompt,
+            "session_id": session_id,
+            "max_tokens": 300
+        }, deadline_s=20, caller=Caller.MAKER)
+        
+        if not synthesis.ok:
+            return {
+                "success": False,
+                "error": f"Synthesis failed: {synthesis.error}",
+                "steps": state["steps"]
+            }
+        
+        synthesis_text = synthesis.data.get("text", "")
+        
+        # PHASE 5: STORE STEP
+        state["steps"].append({
+            "iteration": state["current_iteration"],
+            "action": next_action,
+            "ps_stdout": ps_result.data["stdout"],
+            "ps_stderr": ps_result.data["stderr"],
+            "ps_exit_code": ps_result.data["exit_code"],
+            "worker_insights": worker_insights,
+            "synthesis": synthesis_text,
+            "cost_usd": decision.cost_usd + ps_result.cost_usd + sum(r.cost_usd for r in worker_results if hasattr(r, 'cost_usd')) + synthesis.cost_usd
+        })
+        
+        state["current_iteration"] += 1
+        
+        # PHASE 6: CHECK GOAL ACHIEVEMENT
+        if goal_is_achieved(synthesis_text, state["goal"]):
+            return {
+                "success": True,
+                "final_response": synthesis_text,
+                "steps": state["steps"],
+                "iterations": state["current_iteration"],
+                "total_cost_usd": sum(s["cost_usd"] for s in state["steps"])
+            }
+    
+    # Max iterations reached
+    return {
+        "success": False,
+        "error": "Max iterations reached without goal completion",
+        "final_response": "Goal not achieved after 10 attempts. Manual intervention required.",
+        "steps": state["steps"],
+        "total_cost_usd": sum(s["cost_usd"] for s in state["steps"])
+    }
+
+
+def goal_is_achieved(synthesis_text: str, goal: str) -> bool:
+    """Simple heuristic: check if synthesis contains success indicators."""
+    success_words = ["complete", "achieved", "success", "done", "finished"]
+    return any(word in synthesis_text.lower() for word in success_words)
+
+
+def format_steps(steps: list) -> str:
+    """Format step history for prompt context."""
+    return "\n".join([
+        f"Step {s['iteration']}: {s['action'][:100]}... → {s['ps_exit_code']}"
+        for s in steps
+    ])
+
+
+def format_insights(insights: list) -> str:
+    """Format worker insights for prompt context."""
+    return "\n".join([f"- {i}" for i in insights])
 ```
 
 ### Handover Prompt for Local Agent
 
 ```
-Goal: Run E2E tests for RAG MVP.
+Goal: Implement iterative goal executor in orchestrator/maker/iterative_goal.py.
 
-Test 1: PDF Upload
-  - Create a 10-page test PDF (or use existing)
-  - Upload via web UI
-  - Check logs: chunking completes, embeddings stored
-  - Verify: vector store is not empty
+Core loop (6 phases per iteration):
+1. DECIDE: Ask Sonnet what PowerShell should do next
+2. EXECUTE: Run PowerShell script, capture output
+3. ANALYZE: Spawn 5 parallel Haiku workers to analyze result
+4. SYNTHESIZE: Ask Sonnet to interpret and decide if goal is achieved
+5. STORE: Record all data for this iteration
+6. CHECK: Has goal been achieved? If yes, exit. If no, loop.
 
-Test 2: Single Question
-  - Ask: "What is the main topic of this document?"
-  - Wait for response
-  - Check: latency <10s, cost <$0.10
-  - Verify: answer mentions actual content
+Safety:
+- Max 10 iterations per goal
+- Timeout: 300s per PowerShell execution
+- Escalate if max iterations reached
 
-Test 3: Follow-up Question
-  - Ask related question
-  - Check: response is coherent with first answer
-  - Verify: cost accumulates correctly
+Implement:
+- execute_goal_iteratively() main function
+- goal_is_achieved() helper
+- format_steps() and format_insights() helpers
+- Class IterativeGoalExecutor with async execute() method
 
-Test 4: Telegram
-  - Send same question via Telegram
-  - Check: response arrives via Telegram
-  - Verify: content is same as web UI
+Key prompts to craft:
+1. Decision prompt: "Goal: X. Completed: [steps]. What next?"
+2. Analysis prompts (5x): Focus on different aspects of PS output
+3. Synthesis prompt: "Goal: X. Latest output: Y. Insights: Z. Achieved?"
 
-Success criteria:
-  - All tests pass
-  - No errors in logs
-  - Costs are <$1 total for all tests
-  - Latency is <10s per query
+Test:
+  goal = "Write 'Hello World' to C:\\test.txt"
+  result = await executor.execute_goal(goal, ...)
+  → Should:
+    - Iteration 1: Decide PS should write file
+    - Execute PS: New-Item -Path C:\\test.txt -Value "Hello World"
+    - Analyze results (5 workers)
+    - Synthesis detects success
+    - Return success=True, iterations=1
 
-Report pass/fail + cost breakdown.
+Create commit: git add orchestrator/maker/iterative_goal.py && git commit -m "Implement iterative goal executor (decide → execute → analyze → repeat)"
+```
+
+### Success Criteria
+- ✅ Goal loop executes iteratively
+- ✅ Sonnet decides next action correctly
+- ✅ PowerShell executes and captures output
+- ✅ 5 Haiku workers analyze in parallel
+- ✅ Sonnet synthesizes and detects goal achievement
+- ✅ Loop exits on goal achieved
+- ✅ Loop exits on max iterations with graceful error
+- ✅ Cost tracking works (sum of all iterations)
+- ✅ Simple goal (write file, list directory) completes in 1-2 iterations
+
+---
+
+## Phase 6: E2E MVP Gate (Full Iterative Execution)
+
+### Objective
+Verify end-to-end iterative PowerShell execution with goal completion.
+
+### Test Scenarios
+
+#### Scenario 1: Simple File Operation
+```
+Goal: "Create a file C:\test.txt with content 'Hello World'"
+
+Expected:
+  - Iteration 1: PS creates file
+  - Synthesis detects success
+  - Return: success=True, iterations=1, cost<$0.10
+```
+
+#### Scenario 2: Multi-Step Operation
+```
+Goal: "Get the current date, add 7 days, and save to C:\date.txt"
+
+Expected:
+  - Iteration 1: PS gets current date
+  - Iteration 2: PS adds 7 days
+  - Iteration 3: PS saves to file
+  - Synthesis detects success
+  - Return: success=True, iterations=3, cost<$0.30
+```
+
+#### Scenario 3: Directory Listing & Analysis
+```
+Goal: "List all .log files in C:\logs, count them, and report total size"
+
+Expected:
+  - Iteration 1: PS lists .log files
+  - Iteration 2: PS counts files
+  - Iteration 3: PS calculates total size
+  - Synthesis creates summary
+  - Return: success=True, summary includes count and size
+```
+
+### Handover Prompt for Local Agent
+
+```
+Goal: Run E2E tests for PowerShell Iterative MVP.
+
+Test 1: Simple File Creation
+  goal = "Create C:\\mvp-test.txt with text 'MVP works'"
+  → Wait for execution
+  → Verify: file exists, iterations=1, success=True, cost<$0.15
+
+Test 2: Multi-Step Goal
+  goal = "List files in C:\\, count .txt files, report count"
+  → Wait for execution
+  → Verify: response mentions file count, iterations=2-3, success=True
+
+Test 3: Goal with Timeout Safety
+  goal = "Run a PowerShell script that takes 5 seconds"
+  → Verify: completes successfully within timeout
+
+Success Criteria for MVP Gate:
+  ✅ Simple goal completes in 1 iteration
+  ✅ Multi-step goal completes in <5 iterations
+  ✅ Results are accurate and goal is achieved
+  ✅ Cost per goal <$0.50
+  ✅ Latency <30s per iteration
+  ✅ Error handling gracefully escalates on max iterations
+
+Report:
+  - Test 1 pass/fail
+  - Test 2 pass/fail
+  - Test 3 pass/fail
+  - Total cost for all tests
+  - Any errors encountered
 ```
 
 ### Success Criteria for MVP Gate
 
-- ✅ PDF chunking works
-- ✅ Embeddings are created and stored
-- ✅ Retrieval finds relevant chunks
-- ✅ Haiku workers extract answers in parallel
-- ✅ Sonnet synthesizes coherent responses
-- ✅ Latency <10s per query
-- ✅ Cost <$0.10 per query
-- ✅ Web UI works
-- ✅ Telegram works
+**All must pass to proceed:**
+- ✅ Simple goal (1-step) completes successfully
+- ✅ Multi-step goal completes iteratively
+- ✅ PowerShell executes reliably
+- ✅ Haiku workers analyze correctly
+- ✅ Sonnet decides and synthesizes
+- ✅ Iterations loop until goal achieved
+- ✅ Max iteration limit enforced
+- ✅ Cost tracking accurate
+- ✅ Latency reasonable (<30s/iteration)
 - ✅ No unhandled exceptions
 
-**If all pass:** MVP gate is complete. Phase 6 (PowerShell) can begin.
+**If all pass:** MVP is complete. Phase 1.5 (RAG) can begin.
 
-**If any fail:** Diagnose, fix, re-test before proceeding.
+**If any fail:** Debug, fix, re-test before proceeding.
 
 ---
 
-## Phase 6: PowerShell Adapter (Phase 2, Lower Priority)
+## Phase 1.5: RAG PowerShell History (Post-MVP)
 
 ### Objective
-Enable MAKER to execute PowerShell scripts and feed results back into RAG for analysis.
+Make PowerShell execution history queryable via RAG.
 
-### Implementation (High Level)
+### Components
 
-**File:** `orchestrator/proxy/adapters/powershell.py`
+#### 1.5.1: Text Chunking
+**File:** `orchestrator/maker/chunker.py`
 
-**Spec:**
-- Input: PowerShell script or command
-- Output: stdout/stderr + exit code
-- Execution: Windows native, no intermediary
-- Safety: path validation, no recursive shell escaping
-- Error handling: timeout, process kill, capture errors
+Chunk PowerShell results into overlapping 500-token segments:
+- Input: PowerShell stdout (can be 1000+ lines)
+- Output: list of ~500-token chunks
+- Overlap: 50 tokens (context preservation)
 
-**Integration:**
-- MAKER executor calls powershell adapter
-- Results can be chunked + embedded → fed back into RAG for analysis
-- Daily reports: PowerShell results → Haiku workers analyze → Sonnet synthesizes report
+#### 1.5.2: Voyage AI Embedding
+**File:** `orchestrator/proxy/adapters/voyage_embed.py`
 
-### Handover Prompt for Local Agent (Phase 2)
+Embed chunks via Voyage API:
+- Input: list of text chunks
+- Output: (N, 1024) numpy array of vectors
+- Cache: per-session
+
+#### 1.5.3: Vector Store
+**File:** `orchestrator/maker/vector_store.py`
+
+In-memory ephemeral storage:
+- Store: chunks + embeddings + metadata (when executed, what goal, etc.)
+- Retrieve: cosine similarity search
+- Cleanup: on session end
+
+#### 1.5.4: Retrieval Pattern
+**File:** `orchestrator/maker/retrieval.py`
+
+Query the PowerShell history:
+- Embed user query
+- Search vector store
+- Return top-K relevant chunks
+
+#### 1.5.5: RAG on Results
+Wire into PA dispatcher:
+- User queries history: "What happened during simulations?"
+- Retrieve relevant chunks
+- Spawn Haiku workers to analyze chunks
+- Sonnet synthesizes history
+
+### Handover Prompt for Phase 1.5
 
 ```
-Goal: Build PowerShell adapter for Phase 2.
+Goal: Make PowerShell execution history RAG-able.
 
-Implementation:
-  1. Create orchestrator/proxy/adapters/powershell.py
-  
-  2. Class structure:
-     class PowerShellAdapter(Tool):
-         name = "powershell"
-         allowed_callers = {Caller.PA, Caller.JOB_RUNNER}
-         
-         async def invoke(self, payload, deadline_s, caller):
-             # payload: {"script": str, "timeout_s": int}
-             # Returns: {"stdout": str, "stderr": str, "exit_code": int}
-  
-  3. Implementation:
-     - Use subprocess.Popen with PIPE
-     - Set timeout via asyncio.wait_for
-     - Kill process on timeout
-     - Capture stdout + stderr
-     - Return exit code
-  
-  4. Error handling:
-     - Timeout → return error
-     - Bad script → return stderr
-     - Permission denied → return error
-  
-  5. Test:
-     - Run: Get-Date (should return current date/time)
-     - Run: Exit 1 (should return exit_code=1)
-     - Run: sleep 100 (should timeout + kill process)
+Implementation plan (same as before, but now for PowerShell results):
+1. Chunker: split PS output into overlapping 500-token segments
+2. Embedding: call Voyage API, cache per-session
+3. Vector store: in-memory NumPy, cosine similarity search
+4. Retrieval: query embedding → top-K chunks
+5. RAG: retrieve → analyze (Haiku) → synthesize (Sonnet)
 
-Create commit: git add orchestrator/proxy/adapters/powershell.py && git commit -m "Implement PowerShell adapter for mini PC automation (Phase 2)"
+Files:
+  - orchestrator/maker/chunker.py
+  - orchestrator/proxy/adapters/voyage_embed.py
+  - orchestrator/maker/vector_store.py
+  - orchestrator/maker/retrieval.py
+
+Integration:
+  - On each iterative goal completion, chunk + embed results
+  - Store in session vector store
+  - User can query: "What simulations ran? Show me the metrics."
+
+Test:
+  goal = "Run a command that produces 100+ lines of output"
+  → Execute goal
+  → Chunk results
+  → Query: "What was the output?"
+  → Retrieve relevant chunks
+  → Synthesize answer
+  → Verify accuracy
 ```
-
-### Phase 6 Success Criteria
-
-- ✅ PowerShell script executes
-- ✅ Stdout/stderr captured
-- ✅ Exit code returned
-- ✅ Timeout + process kill works
-- ✅ Results can be chunked + fed to RAG
-- ✅ Map-reduce analysis of results works
 
 ---
 
 ## Decision Checklist
 
-Before starting each phase, confirm:
+Before starting each phase:
 
 | Phase | Pre-Condition | Status |
 |-------|--------------|--------|
@@ -1251,13 +947,12 @@ Before starting each phase, confirm:
 | 3 | Phase 1-2 complete | Blocked until Phase 1 ✓ |
 | 4 | Phase 3 complete | Blocked until Phase 3 ✓ |
 | 5 | Phase 4 complete | Blocked until Phase 4 ✓ |
-| 6 | Phase 5 complete | Blocked until Phase 5 ✓ |
+| 6 | Phase 5 complete | **MVP Gate** — Blocked until Phase 5 ✓ |
+| 1.5 | Phase 6 complete | Post-MVP, Blocked until Phase 6 ✓ |
 
 ---
 
 ## Commit Messages
-
-Use these templates for consistency:
 
 **Phase 1:**
 ```
@@ -1271,42 +966,27 @@ Move Groq adapter to experiments/ (post-MVP trial)
 
 **Phase 3:**
 ```
-Create MAKER module structure for RAG/PowerShell execution
+Create MAKER module structure for iterative goal execution
 ```
 
-**Phase 4.1:**
+**Phase 4:**
 ```
-Implement text chunking (500-token overlapping segments)
-```
-
-**Phase 4.2:**
-```
-Add Voyage AI embedding adapter with per-session caching
-```
-
-**Phase 4.3:**
-```
-Implement in-memory vector store with cosine similarity retrieval
-```
-
-**Phase 4.4:**
-```
-Implement query embedding and chunk retrieval pipeline
-```
-
-**Phase 4.5:**
-```
-Implement map-reduce synthesis (parallel Haiku workers + Sonnet synthesizer)
+Implement PowerShell adapter for iterative goal execution
 ```
 
 **Phase 5:**
 ```
-Verify RAG MVP end-to-end (PDF → Q&A → Synthesis)
+Implement iterative goal executor (decide → execute → analyze → repeat)
 ```
 
 **Phase 6:**
 ```
-Implement PowerShell adapter for mini PC automation (Phase 2)
+Verify PowerShell iterative MVP end-to-end (MVP Gate complete)
+```
+
+**Phase 1.5:**
+```
+Implement RAG on PowerShell execution history (query what was done)
 ```
 
 ---
@@ -1317,47 +997,45 @@ Implement PowerShell adapter for mini PC automation (Phase 2)
 |-------|------|---------|
 | 0 | 30 min | Phase 0 → Phase 1 |
 | 1-3 | 2-3 hrs | Phase 3 → Phase 4 |
-| 4 | 4-6 hrs | Phase 4 → Phase 5 |
-| 5 | 2-3 hrs | Phase 5 → Phase 6 |
-| 6 | 3-4 hrs | (Phase 2, lower priority) |
-
-**Total for MVP (Phases 0-5): ~1-2 working days**
+| 4 | 2-3 hrs | Phase 4 → Phase 5 |
+| 5 | 4-6 hrs | Phase 5 → Phase 6 |
+| 6 | 2-3 hrs | **MVP Gate** |
+| **Total to MVP: 1-2 days** | | |
+| 1.5 | 3-4 hrs | (Post-MVP) |
 
 ---
 
-## Next Steps
+## Architecture Summary
 
-1. **You (on local machine):**
-   - Run Phase 0 verification
-   - Report findings
-
-2. **I (on this session):**
-   - Adjust Phases 1-3 based on Phase 0 findings
-   - Prepare detailed code handover for Phase 4
-
-3. **You (on local machine):**
-   - Execute Phases 1-3 (deletions, moves, skeleton)
-   - Commit and push
-
-4. **I:**
-   - Review commits
-   - Provide detailed Phase 4 implementation prompts
-
-5. **You:**
-   - Build RAG components (4.1-4.5)
-   - Run E2E tests (Phase 5)
-   - Verify MVP gate passes
-
-6. **Phase 6:**
-   - PowerShell adapter (post-MVP, Phase 2)
+```
+User Intent → PA (Haiku routing)
+              ↓
+           MAKER (orchestrator)
+              ↓
+        [Iterative Loop: 1-10 iterations]
+            ↓
+        1. DECIDE (Sonnet): What should PS do?
+            ↓
+        2. EXECUTE (PowerShell): Run command
+            ↓
+        3. ANALYZE (5 Haiku workers): What happened?
+            ↓
+        4. SYNTHESIZE (Sonnet): Goal achieved?
+            ↓
+        5. LOOP or EXIT
+            ↓
+        Final Response + Full Execution History
+            ↓
+        [Phase 1.5: RAG History]
+        Users can query: "What did the system do?"
+```
 
 ---
 
 ## Resources
 
 - **Project Vision:** `01.Project_Management/Project_Vision.md`
+- **Build Roadmap:** `BUILD_STATUS.md` (root)
 - **Adapter Spec:** `01.Project_Management/adapter-spec.md`
 - **Architecture Diagram:** `01.Project_Management/arch_diagram.md`
-- **Security Model:** `01.Project_Management/security-model.md`
-- **.env template:** Check `.env.example` for required API keys (Voyage, Anthropic)
 
