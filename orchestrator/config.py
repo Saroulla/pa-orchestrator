@@ -58,7 +58,6 @@ class EscalationConfig(BaseModel):
 
 class ToolAccess(BaseModel):
     claude_api: str
-    claude_code: str
     brave_search: str
     file_read: str
     file_write: str
@@ -74,15 +73,7 @@ class FileWriteConfig(BaseModel):
 
 
 class ContextSwitch(BaseModel):
-    pa_to_cto: str
-    cto_to_pa: str
     pa_to_desktop: str
-
-
-class SubAgentConfig(BaseModel):
-    hard_cap_concurrent: int
-    idle_kill_minutes: int
-    workspace_size_mb: int
 
 
 class LoggingConfig(BaseModel):
@@ -95,7 +86,6 @@ class LoggingConfig(BaseModel):
 class ModelsConfig(BaseModel):
     pa_chat: str = "claude-haiku-4-5-20251001"
     summarize: str = "claude-haiku-4-5-20251001"
-    cto_brief: str = "claude-sonnet-4-6"
     plan_author: str = "claude-sonnet-4-6"
 
 
@@ -108,7 +98,6 @@ class Guardrails(BaseModel):
     tool_access: ToolAccess
     file_write: FileWriteConfig
     context_switch: ContextSwitch
-    sub_agent: SubAgentConfig
     logging: LoggingConfig
 
 

@@ -41,7 +41,6 @@ def _make_valid_dict() -> dict:
         },
         "tool_access": {
             "claude_api": "enabled",
-            "claude_code": "enabled",
             "brave_search": "enabled",
             "file_read": "enabled",
             "file_write": "enabled",
@@ -50,13 +49,10 @@ def _make_valid_dict() -> dict:
             "email_send": "phase_1_2",
             "template": "phase_1_2",
         },
-        "file_write": {"max_bytes": 10485760, "enabled_for": ["pa", "cto_subagent", "job_runner"]},
+        "file_write": {"max_bytes": 10485760, "enabled_for": ["pa", "job_runner"]},
         "context_switch": {
-            "pa_to_cto": "allowed",
-            "cto_to_pa": "allowed",
             "pa_to_desktop": "stub_only",
         },
-        "sub_agent": {"hard_cap_concurrent": 2, "idle_kill_minutes": 15, "workspace_size_mb": 500},
         "logging": {
             "destination": "file",
             "path": "logs/audit.jsonl",
@@ -87,7 +83,6 @@ def test_load_valid_yaml(tmp_yaml):
     assert cfg.budgets.per_session_usd_per_day == 5.00
     assert cfg.budgets.max_input_tokens == 12000
     assert cfg.retry.max_attempts == 3
-    assert cfg.sub_agent.hard_cap_concurrent == 2
     assert cfg.tool_access.claude_api == "enabled"
     assert cfg.tool_access.playwright == "phase_1_2"
     assert cfg.failure_policy.defaults.timeout == "retry_2x_then_escalate"

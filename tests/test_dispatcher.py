@@ -16,7 +16,6 @@ from orchestrator.config import (
     Guardrails,
     LoggingConfig,
     RetryConfig,
-    SubAgentConfig,
     ToolAccess,
 )
 from orchestrator.models import (
@@ -69,7 +68,6 @@ def make_config(
         ),
         tool_access=ToolAccess(
             claude_api="enabled",
-            claude_code="enabled",
             brave_search="enabled",
             file_read="enabled",
             file_write="enabled",
@@ -80,17 +78,10 @@ def make_config(
         ),
         file_write=FileWriteConfig(
             max_bytes=10485760,
-            enabled_for=["pa", "cto_subagent", "job_runner"],
+            enabled_for=["pa", "job_runner"],
         ),
         context_switch=ContextSwitch(
-            pa_to_cto="allowed",
-            cto_to_pa="allowed",
             pa_to_desktop="stub_only",
-        ),
-        sub_agent=SubAgentConfig(
-            hard_cap_concurrent=2,
-            idle_kill_minutes=15,
-            workspace_size_mb=500,
         ),
         logging=LoggingConfig(
             destination="file",

@@ -5,6 +5,4 @@ ingress:
   - hostname: pa.khoury.uk
     path: /webhook/telegram
     service: http://127.0.0.1:8080
-  - hostname: khoury.uk
-    service: http://127.0.0.1:8080
   - service: http_status:404

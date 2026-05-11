@@ -56,7 +56,7 @@ class ErrorDetail(BaseModel):
 class Intent(BaseModel):
     kind: Literal[
         "reason", "code", "search", "file_read", "file_write",
-        "external_api", "desktop", "plan_step",
+        "external_api", "desktop", "plan_step", "goal",
     ]
     payload: dict[str, Any]
     session_id: str

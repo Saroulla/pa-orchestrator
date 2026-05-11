@@ -7,16 +7,9 @@ from orchestrator.parser import parse
 SESSION = "test-sess-01"
 
 
-def test_cto_command_kind_and_payload():
-    """@CTO write a script → kind=code, payload text = remainder."""
-    intent = parse("@CTO write a script", SESSION, Mode.PA)
-    assert intent.kind == "code"
-    assert intent.payload["text"] == "write a script"
-
-
 def test_pa_command_kind():
-    """@PA hello → kind=reason (switch signal to PA)."""
-    intent = parse("@PA hello", SESSION, Mode.CTO)
+    """@PA hello → kind=reason, payload text = remainder."""
+    intent = parse("@PA hello", SESSION, Mode.PA)
     assert intent.kind == "reason"
     assert intent.payload["text"] == "hello"
 
@@ -27,37 +20,25 @@ def test_cost_meta_command():
     assert intent.payload.get("meta_command") == "cost"
 
 
-def test_cost_no_switch_in_cto_mode():
-    """@cost from CTO mode must not produce kind=code (no-op via meta_command)."""
-    intent = parse("@cost", SESSION, Mode.CTO)
-    assert intent.payload.get("meta_command") == "cost"
-
-
 def test_escaped_at_no_switch():
-    r"""\\@CTO literal → no switch; payload text is "@CTO literal" (backslash stripped)."""
-    intent = parse(r"\@CTO literal", SESSION, Mode.PA)
+    r"""\@PA literal → no switch; payload text is "@PA literal" (backslash stripped)."""
+    intent = parse(r"\@PA literal", SESSION, Mode.PA)
     # kind is determined by current mode, not by the escaped token
     assert intent.kind == "reason"
-    assert intent.payload["text"] == "@CTO literal"
+    assert intent.payload["text"] == "@PA literal"
 
 
 def test_mid_message_at_is_literal():
-    """tell me about @CTO patterns → @ not first token, treated as literal."""
-    intent = parse("tell me about @CTO patterns", SESSION, Mode.PA)
+    """tell me about @PA patterns → @ not first token, treated as literal."""
+    intent = parse("tell me about @PA patterns", SESSION, Mode.PA)
     assert intent.kind == "reason"
-    assert "@CTO" in intent.payload["text"]
+    assert "@PA" in intent.payload["text"]
 
 
 def test_empty_string_pa_mode():
     """Empty string in PA mode → kind=reason."""
     intent = parse("", SESSION, Mode.PA)
     assert intent.kind == "reason"
-
-
-def test_empty_string_cto_mode():
-    """Empty string in CTO mode → kind=code."""
-    intent = parse("", SESSION, Mode.CTO)
-    assert intent.kind == "code"
 
 
 def test_desktop_command():
@@ -85,18 +66,25 @@ def test_caller_propagated():
 
 
 def test_mode_propagated():
-    intent = parse("hello", SESSION, Mode.CTO)
-    assert intent.mode == Mode.CTO
-
-
-def test_cto_no_remainder():
-    """@CTO with no text after it → payload text is empty string."""
-    intent = parse("@CTO", SESSION, Mode.PA)
-    assert intent.kind == "code"
-    assert intent.payload["text"] == ""
+    intent = parse("hello", SESSION, Mode.DESKTOP)
+    assert intent.mode == Mode.DESKTOP
 
 
 def test_escaped_at_no_remainder():
-    r"""\\@PA with no remainder → text is just "@PA"."""
+    r"""\@PA with no remainder → text is just "@PA"."""
     intent = parse(r"\@PA", SESSION, Mode.PA)
     assert intent.payload["text"] == "@PA"
+
+
+def test_goal_command():
+    """@goal install git → kind=goal, payload text = remainder."""
+    intent = parse("@goal install git", SESSION, Mode.PA)
+    assert intent.kind == "goal"
+    assert intent.payload["text"] == "install git"
+
+
+def test_goal_command_no_remainder():
+    """@goal with no remainder → kind=goal, payload text = empty string."""
+    intent = parse("@goal", SESSION, Mode.PA)
+    assert intent.kind == "goal"
+    assert intent.payload["text"] == ""

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 CLAUDE_MD_PATH = REPO_ROOT / "CLAUDE.md"
 
 _TOOL_INVENTORY_HEADER = """
@@ -34,15 +34,13 @@ def _build_inventory() -> str:
     # Deferred imports prevent circular imports at module load time.
     from orchestrator.proxy.adapters.brave_search import BraveSearchAdapter
     from orchestrator.proxy.adapters.claude_api import ClaudeAPIAdapter
-    from orchestrator.proxy.adapters.claude_code import ClaudeCodeAdapter
     from orchestrator.proxy.adapters.file_read import FileReadAdapter
     from orchestrator.proxy.adapters.file_write import FileWriteAdapter
 
-    # ClaudeAPIAdapter and ClaudeCodeAdapter have non-trivial __init__ args
-    # (API client, spawner …) but manifest is a pure property — __new__ is safe.
+    # ClaudeAPIAdapter has non-trivial __init__ args (API client) but manifest is
+    # a pure property — __new__ is safe.
     adapters = [
         ClaudeAPIAdapter.__new__(ClaudeAPIAdapter),
-        ClaudeCodeAdapter.__new__(ClaudeCodeAdapter),
         BraveSearchAdapter(),
         FileReadAdapter(),
         FileWriteAdapter(),

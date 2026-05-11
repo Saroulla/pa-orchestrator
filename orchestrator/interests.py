@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 INTERESTS_PATH = REPO_ROOT / "config" / "interests.md"
 
 _HEADER = (

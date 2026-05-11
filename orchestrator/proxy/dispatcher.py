@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import AsyncIterator, Callable
 
+from orchestrator.maker.safety import MAKERError, MAKERMaxIterationsError, MAKERSafetyError
 from orchestrator.models import Caller, ErrorCode, ErrorDetail, Intent, Result
 from orchestrator.proxy.protocol import Tool
 
@@ -13,12 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 class Dispatcher:
-    def __init__(self, config_getter: Callable, escalation_module) -> None:
+    def __init__(self, config_getter: Callable, escalation_module, goal_executor=None) -> None:
         # config_getter: () -> Guardrails
         # escalation_module: module/object with async create(...)
         self._config_getter = config_getter
         self._escalation = escalation_module
         self._tools: dict[str, Tool] = {}
+        self._goal_executor = goal_executor
 
     def register(self, tool: Tool, kind: str | None = None) -> None:
         key = kind if kind is not None else tool.name
@@ -79,6 +81,22 @@ class Dispatcher:
         return None
 
     async def dispatch(self, intent: Intent, db) -> Result:
+        # goal intents bypass the tool registry and go directly to IterativeGoalExecutor
+        if intent.kind == "goal":
+            if self._goal_executor is None:
+                return Result(
+                    ok=False,
+                    error=ErrorDetail(code=ErrorCode.INTERNAL, message="goal executor not configured", retriable=False),
+                )
+            try:
+                return await self._goal_executor.run(intent.payload["text"], intent.session_id)
+            except MAKERMaxIterationsError as exc:
+                return Result(ok=False, error=ErrorDetail(code=ErrorCode.QUOTA, message=str(exc), retriable=False), cost_usd=0.0, meta={"tool": "maker"})
+            except MAKERSafetyError as exc:
+                return Result(ok=False, error=ErrorDetail(code=ErrorCode.UNAUTHORIZED, message=str(exc), retriable=False), cost_usd=0.0, meta={"tool": "maker"})
+            except MAKERError as exc:
+                return Result(ok=False, error=ErrorDetail(code=ErrorCode.INTERNAL, message=str(exc), retriable=False), cost_usd=0.0, meta={"tool": "maker"})
+
         # 1. Unregistered tool → INTERNAL
         tool = self._tools.get(intent.kind)
         if tool is None:

@@ -70,10 +70,10 @@ async def test_pa_unauthorized_arbitrary_path(repo: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. CTO_SUBAGENT writes inside its own workspace — ok
+# 3. JOB_RUNNER writes inside its own scoped workspace — ok
 # ---------------------------------------------------------------------------
 
-async def test_cto_writes_own_workspace(repo: Path) -> None:
+async def test_job_runner_writes_own_workspace(repo: Path) -> None:
     session_id = "sess-aabb1234"
     workspace = repo / "sessions" / session_id / "workspace"
     workspace.mkdir(parents=True)
@@ -86,17 +86,17 @@ async def test_cto_writes_own_workspace(repo: Path) -> None:
             "session_id": session_id,
         },
         deadline_s=10.0,
-        caller=Caller.CTO_SUBAGENT,
+        caller=Caller.JOB_RUNNER,
     )
     assert result.ok, result.error
     assert target.read_text(encoding="utf-8") == "print('hello')"
 
 
 # ---------------------------------------------------------------------------
-# 4. CTO_SUBAGENT writes to another session's workspace — UNAUTHORIZED
+# 4. JOB_RUNNER writes to another session's workspace — UNAUTHORIZED
 # ---------------------------------------------------------------------------
 
-async def test_cto_cannot_write_other_session(repo: Path) -> None:
+async def test_job_runner_cannot_write_other_session(repo: Path) -> None:
     own_session = "sess-myown1234"
     other_session = "sess-other5678"
 
@@ -108,10 +108,10 @@ async def test_cto_cannot_write_other_session(repo: Path) -> None:
         {
             "path": str(other_target),
             "content": "evil",
-            "session_id": own_session,  # CTO presents its OWN session_id
+            "session_id": own_session,  # JOB_RUNNER presents its OWN scope id
         },
         deadline_s=10.0,
-        caller=Caller.CTO_SUBAGENT,
+        caller=Caller.JOB_RUNNER,
     )
     assert not result.ok
     assert result.error.code == ErrorCode.UNAUTHORIZED
@@ -226,14 +226,14 @@ async def test_relative_path_resolved_to_repo_root(repo: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Extra: CTO_SUBAGENT without session_id — UNAUTHORIZED
+# Extra: JOB_RUNNER without session_id — UNAUTHORIZED
 # ---------------------------------------------------------------------------
 
-async def test_cto_without_session_id_unauthorized(repo: Path) -> None:
+async def test_job_runner_without_session_id_unauthorized(repo: Path) -> None:
     result = await adapter.invoke(
         {"path": str(repo / "jobs" / "x.txt"), "content": "x", "session_id": None},
         deadline_s=10.0,
-        caller=Caller.CTO_SUBAGENT,
+        caller=Caller.JOB_RUNNER,
     )
     assert not result.ok
     assert result.error.code == ErrorCode.UNAUTHORIZED
@@ -258,7 +258,7 @@ async def test_pa_writes_into_templates(repo: Path) -> None:
 # Extra: adapter creates subdirectory inside workspace automatically
 # ---------------------------------------------------------------------------
 
-async def test_cto_creates_subdir_in_workspace(repo: Path) -> None:
+async def test_job_runner_creates_subdir_in_workspace(repo: Path) -> None:
     session_id = "sess-subdir12"
     (repo / "sessions" / session_id / "workspace").mkdir(parents=True)
 
@@ -266,7 +266,7 @@ async def test_cto_creates_subdir_in_workspace(repo: Path) -> None:
     result = await adapter.invoke(
         {"path": str(target), "content": "# sub", "session_id": session_id},
         deadline_s=10.0,
-        caller=Caller.CTO_SUBAGENT,
+        caller=Caller.JOB_RUNNER,
     )
     assert result.ok, result.error
     assert target.read_text(encoding="utf-8") == "# sub"

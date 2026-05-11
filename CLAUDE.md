@@ -9,11 +9,11 @@ Caveman mode in this doc: strip filler, keep essential words, technical precisio
 ---
 
 ## Project Overview
-Single-node Personal Assistant orchestrator on a mini PC. ONE Python service (PA) parses Web UI + Telegram input, routes intents via in-process Proxy Layer to adapters and on-demand sub-agents, enforces YAML guardrails, maintains per-session mode state. All intelligence via Claude API. No Docker. No Redis. No local LLM.
+Single-node Personal Assistant orchestrator on a mini PC. ONE Python service (PA) parses Web UI + Telegram input, routes intents via in-process Proxy Layer to adapters and the MAKER iterative-goal engine, enforces YAML guardrails, maintains per-session mode state. All intelligence via Claude API. No Docker. No Redis. No local LLM.
 
 Single user, personal use. User describes workflows in natural language; PA designs, files, and runs them.
 
-**MVP target:** Phase 1 (16 build steps). Phase 1.2 adds the workflow engine.
+**Active phase:** Phase 2 — MAKER (M1–M9 complete; M10 E2E remaining). Phases 1 and 1.2 shipped.
 
 ---
 
@@ -43,7 +43,7 @@ Agents waiting on a dependency: check `BUILD_STATUS.md` to see when the blocking
 |------|-------|-------------|
 | OS | Windows 11 Pro | `subprocess.terminate()`/`.kill()`. `creationflags=CREATE_NEW_PROCESS_GROUP`. No POSIX signals. |
 | CPU | AMD Ryzen 3 4300U — 4 cores / 4 threads @ 2.7 GHz | 1 uvicorn worker + 1 scheduler subprocess = 2 working processes. CPU-heavy tasks must be off main loop. |
-| RAM | 16 GB usable ~14.9 GB | Footprint target ~250 MB for PA process. Hard cap 2 concurrent CTO subprocesses (~500 MB-1 GB each). |
+| RAM | 16 GB usable ~14.9 GB | Footprint target ~250 MB for PA process. Headroom for transient MAKER subprocesses. |
 | Disk | 477 GB total, 403 GB free | Per-session workspace cap 500 MB. Log rotation at 100 MB. Chromium bundle ~200 MB acceptable. |
 | GPU | Radeon integrated | Unused. No local inference. |
 
@@ -54,14 +54,13 @@ Agents waiting on a dependency: check `BUILD_STATUS.md` to see when the blocking
 | `uvicorn orchestrator.main:app --workers 1` | FastAPI: web routes, Telegram webhook, WS, events_consumer | Single worker eliminates cross-worker WebSocket push problem. asyncio handles concurrency for one user. |
 | `python -m orchestrator.scheduler_main` (Phase 1.2) | APScheduler 3.10 + job_runner | Crash-isolation; long jobs cannot block chat. |
 | `cloudflared.exe` (Windows service) | Public ingress for Telegram webhook only | Native binary, lighter than container. |
-| `claude.exe` subprocess (on-demand) | CTO sub-agent | Spawned per session; reaped on idle/switch. Hard cap 2 concurrent. |
 
 ---
 
 ## Repo Structure
 
 ```
-_REPO/
+pa-orchestrator/
 ├── orchestrator/
 │   ├── main.py              # FastAPI app + lifespan + events_consumer
 │   ├── scheduler_main.py    # Separate scheduler process [Phase 1.2]
@@ -75,17 +74,23 @@ _REPO/
 │   ├── tokens.py            # Anthropic count_tokens
 │   ├── history.py           # Sliding window + summary anchor
 │   ├── job_runner.py        # Deterministic job executor [Phase 1.2]
-│   ├── spawner.py           # Claude Code subprocess + reaper
 │   ├── telegram.py          # Telegram bot router + sender
+│   ├── maker/               # [Phase 2] MAKER iterative-goal engine
+│   │   ├── __init__.py
+│   │   ├── executor.py      # MAKERExecutor.run_powershell
+│   │   ├── iterative_goal.py # IterativeGoalExecutor (6-phase loop)
+│   │   ├── state.py         # IterationState, GoalState dataclasses
+│   │   ├── safety.py        # MAKERError hierarchy
+│   │   └── prompts.py       # DECIDE/ANALYZE/SYNTHESIZE templates + helpers
 │   └── proxy/
 │       ├── protocol.py      # Tool ABC + Caller enum + Result/Intent
 │       ├── dispatcher.py    # Route intent → adapter + retry/backoff + Caller check
 │       └── adapters/
 │           ├── claude_api.py        # Streaming SSE + prompt caching
-│           ├── claude_code.py       # NDJSON envelope on stdio + PA-voice wrappers
 │           ├── brave_search.py
 │           ├── file_read.py         # Path traversal protection
 │           ├── file_write.py        # Caller-scoped allowlist + atomic
+│           ├── powershell.py        # [Phase 2] PowerShellAdapter (Tool wrapper)
 │           ├── playwright_web.py    # [Phase 1.2]
 │           ├── pdf_extract.py       # [Phase 1.2]
 │           ├── email_send.py        # [Phase 1.2]
@@ -101,7 +106,7 @@ _REPO/
 │   ├── interests.md         # [Phase 1.2]
 │   └── templates/           # [Phase 1.2]
 ├── jobs/                    # [Phase 1.2]
-├── sessions/                # gitignored — sub-agent workdirs
+├── sessions/                # gitignored — unused (CTO removed)
 ├── logs/                    # gitignored
 ├── orchestrator.db          # gitignored — SQLite, WAL
 ├── requirements.txt
@@ -109,13 +114,18 @@ _REPO/
 ├── .env / .env.example
 ├── CLAUDE.md                # this file
 ├── 01.Project_Management/
-│   ├── build.md             # Build sequence
-│   ├── arch_diagram.md      # Mermaid
+│   ├── AGENT_ONBOARDING.md  # Cold-start guide for build agents
+│   ├── MAKER_spec.md        # Authoritative MAKER design spec
+│   ├── Maker_build.md       # Per-step build cards (M0–M10)
+│   ├── build_status.md      # Live agent coordination board
 │   ├── job-system.md        # Job file format + executor [Phase 1.2]
 │   ├── adapter-spec.md      # All adapter contracts
-│   ├── sub-agent-pattern.md # CTO NDJSON envelope spec
 │   ├── security-model.md    # Path security + caller restrictions
-│   └── escalation-model.md  # Escalation table state machine
+│   ├── escalation-model.md  # Escalation table state machine
+│   ├── Project_Vision.md    # PA + MAKER + worker-hierarchy vision
+│   ├── Execution_Plan.md    # DEPRECATED — superseded by MAKER_spec.md
+│   ├── build.phase1.archive.md   # Phase-1 build sequence (historical)
+│   └── arch_diagram.phase1.archive.md  # Phase-1 architecture (historical)
 └── .gitignore
 ```
 
@@ -136,7 +146,6 @@ _REPO/
 | Templates | Jinja2 [Phase 1.2] | `config/templates/` |
 | Token counting | anthropic SDK `count_tokens` | Real counts; not character estimates |
 | Public ingress | cloudflared.exe (Windows service) | Telegram webhook only |
-| Sub-agent | claude CLI subprocess | NDJSON envelope on stdout |
 | Web UI | Vite + React + TypeScript | Bound to 127.0.0.1 |
 | Cost cap | $5 USD / session / day, hard kill | Enforced pre-dispatch |
 
@@ -146,24 +155,23 @@ _REPO/
 
 | Command | Behaviour | LLM call? |
 |---------|-----------|-----------|
-| `@CTO` | Switch to CTO mode; next message = first request | One Claude call to write task brief at spawn |
-| `@PA` | Switch back to PA | None |
+| `@PA` | Return to PA mode | None |
 | `@cost` | Instant SQLite cost lookup | None |
-| `@Desktop` | Stub: "Coming in Phase 1.2" | None |
+| `@goal <text>` | Run MAKER iterative-goal loop | Yes — Decide/Analyze/Synthesize cycle |
+| `@remember <text>` | Append to `config/interests.md` + rebuild PA prompt | None |
+| `@Desktop` | Stub: "Coming in Phase 3" | None |
 | `@rebuild-plan <path>` [Phase 1.2] | Regenerate `## Execution Plan` for a job file | One Claude call |
 
 Rules:
-- First-token only. `tell me about @CTO patterns` → `@` is literal.
-- `\@CTO` → escape, literal text.
+- First-token only. `tell me about @PA patterns` → `@` is literal.
+- `\@PA` → escape, literal text.
 - Mode persists across messages until explicitly switched.
-- PA always the face. Sub-agent output routes through PA's wrapper layer before reaching the user (see § Sub-agent pattern).
 
 ---
 
 ## Mode FSM (per session)
 
 ```
-PA ──@CTO──▶ CTO ──@PA──▶ PA
 PA ──@Desktop──▶ DESKTOP_STUB ──(any input)──▶ PA
 ```
 
@@ -177,16 +185,15 @@ PA ──@Desktop──▶ DESKTOP_STUB ──(any input)──▶ PA
 ```python
 class Caller(StrEnum):
     PA = "pa"
-    CTO_SUBAGENT = "cto_subagent"
     JOB_RUNNER = "job_runner"
 
 @dataclass
 class Intent:
     kind: Literal["reason","code","search","file_read","file_write",
-                  "external_api","desktop","plan_step"]
+                  "external_api","desktop","plan_step","goal"]
     payload: dict
     session_id: str
-    mode: Literal["PA","CTO","DESKTOP"]
+    mode: Literal["PA","DESKTOP"]
     caller: Caller
     deadline_s: float
     attempt: int
@@ -213,8 +220,9 @@ class Tool(Protocol):
 ```
 
 Adapters:
-- **MVP:** ClaudeAPIAdapter, ClaudeCodeAdapter, BraveSearchAdapter, FileReadAdapter, FileWriteAdapter (caller-scoped)
+- **MVP:** ClaudeAPIAdapter, BraveSearchAdapter, FileReadAdapter, FileWriteAdapter (caller-scoped)
 - **Phase 1.2:** PlaywrightAdapter, PDFExtractAdapter, EmailAdapter, TemplateRenderAdapter
+- **Phase 2:** PowerShellAdapter (wraps MAKERExecutor; cost_usd=0.0 — LLM cost is in Decide/Analyze/Synthesize calls)
 
 Full manifests: `01.Project_Management/adapter-spec.md`.
 
@@ -225,44 +233,6 @@ Full manifests: `01.Project_Management/adapter-spec.md`.
 `TIMEOUT | RATE_LIMIT | TOOL_ERROR | QUOTA | BAD_INPUT | UNAUTHORIZED | INTERNAL`
 
 All errors carry `retriable: bool`.
-
----
-
-## Sub-Agent Pattern (CTO)
-
-Output protocol: **NDJSON envelope on stdout** — one JSON object per line:
-
-```json
-{"phase": "plan",   "content": "...", "needs_confirmation": true}
-{"phase": "action", "content": "..."}
-{"phase": "result", "content": "...", "files_changed": [...], "summary_needed": false}
-{"phase": "error",  "content": "...", "code": "..."}
-```
-
-Free-text on stdout that is not envelope-conformant goes to stderr (logged, never to user). Stderr is captured to `sessions/{id}/cto.err.log`.
-
-PA-side wrappers (deterministic, NO LLM call) translate phases to user-facing PA voice:
-- `plan + needs_confirmation` → templated confirmation prompt + escalation row
-- `action` → streamed `→ ...` line
-- `result + summary_needed=false` → templated done message
-- `result + summary_needed=true` → ONE Claude call to synthesise (rare path)
-- `error` → escalation row with `(a) retry (b) abort`
-
-Sub-agent CLAUDE.md (written by spawner) instructs CTO to use this envelope. Spec: `01.Project_Management/sub-agent-pattern.md`.
-
-Per-session workspace:
-```
-sessions/{session_id}/
-├── .claude/
-│   ├── CLAUDE.md         ← spawner-written, includes task brief (1 Claude call)
-│   └── skills/
-│       └── code.md       ← what this agent can do
-└── workspace/            ← FileWriteAdapter scope for this CTO instance
-```
-
-Cleanup: `proc.terminate()` → 5s → `proc.kill()`. Workspace GC after 24h. Hard cap 2 concurrent CTO procs; reaper kills oldest on breach.
-
-Env: scrubbed of host secrets, only explicit allowlist injected.
 
 ---
 
@@ -301,7 +271,7 @@ Full spec: `01.Project_Management/job-system.md`.
 
 ## SQLite Schema
 
-See `01.Project_Management/build.md` § Step 4 for the full DDL. Tables:
+See `01.Project_Management/build.phase1.archive.md` § Step 4 for the full DDL. Tables:
 
 - `sessions` (id, channel, mode, cc_pid, telegram_chat_id, cost_to_date_usd, summary_anchor, timestamps)
 - `messages` (id, session_id, role, content, tokens, created_at) — replaces in-row history JSON
@@ -389,7 +359,6 @@ escalation:
 
 tool_access:
   claude_api:    enabled
-  claude_code:   enabled
   brave_search:  enabled
   file_read:     enabled
   file_write:    enabled          # Item H — caller-scoped allowlist enforces safety
@@ -400,17 +369,10 @@ tool_access:
 
 file_write:
   max_bytes: 10485760             # 10 MB per write
-  enabled_for: [pa, cto_subagent, job_runner]
+  enabled_for: [pa, job_runner]
 
 context_switch:
-  pa_to_cto: allowed
-  cto_to_pa: allowed
   pa_to_desktop: stub_only        # Phase 1; built in Phase 2
-
-sub_agent:
-  hard_cap_concurrent: 2
-  idle_kill_minutes: 15
-  workspace_size_mb: 500
 
 logging:
   destination: file
@@ -428,10 +390,9 @@ logging:
 - Telegram webhook accepts only via Cloudflare Tunnel hostname; reject direct hits.
 - Web UI bound to `127.0.0.1` only — never exposed externally.
 - Outbound: no inbound rules from local machine; outbound 443 only via tunnel + APIs.
-- FileWriteAdapter: caller-scoped allowlist (`security-model.md`). PA cannot write outside `jobs/`, `config/interests.md`, `config/templates/`, active session workspace. CTO subagent cannot escape its own session workspace. Job runner cannot escape job-scoped workspace.
+- FileWriteAdapter: caller-scoped allowlist (`security-model.md`). PA cannot write outside `jobs/`, `config/interests.md`, `config/templates/`, active session workspace. Job runner cannot escape job-scoped workspace.
 - Path validation: `Path.resolve(strict=False) + os.path.realpath + Path.is_relative_to(allowed_root)` — handles `..`, symlinks, junctions on Windows.
 - session_id regex: `^[a-zA-Z0-9_-]{8,64}$`.
-- Sub-agent env: scrubbed; explicit allowlist only.
 - Cost: hard kill on $5/day breach.
 
 Full model: `01.Project_Management/security-model.md`.
@@ -471,16 +432,15 @@ Single uvicorn worker means web/Telegram traffic and WS connections share one pr
 
 ## Phased Rollout
 
-### Phase 1 — MVP (16 build steps; see build.md)
+### Phase 1 — MVP (shipped)
 - Repo + run.ps1 + cloudflared service
 - Models, store, escalation engine, events table
-- 5 MVP adapters (claude_api, claude_code, brave_search, file_read, file_write)
-- Spawner with NDJSON envelope handling + brief generator
+- 4 MVP adapters (claude_api, brave_search, file_read, file_write)
 - FastAPI app: chat, WS, telegram webhook, events_consumer
 - Web UI terminal
-- E2E gate: @CTO write file → confirm via escalation → @PA describes → @cost works → Telegram round-trip works
+- See `01.Project_Management/build.phase1.archive.md` for the historical build sequence.
 
-### Phase 1.2 — Workflow Engine (8 build steps)
+### Phase 1.2 — Workflow Engine (shipped)
 - Scheduler subprocess (APScheduler 3.10 + SQLAlchemyJobStore)
 - Job runner (deterministic execution of `## Execution Plan`)
 - PA's plan-author flow + `@rebuild-plan`
@@ -488,7 +448,14 @@ Single uvicorn worker means web/Telegram traffic and WS connections share one pr
 - Async job notification through events table
 - Interest profile read/update flow
 
-### Phase 2 — Autonomy + Observability
+### Phase 2 — MAKER (active — M10 remaining)
+- Iterative goal-execution engine: Decide (Sonnet) → Execute (PowerShell) → Analyze (Haiku ×5) → Synthesize (Sonnet) → loop; capped at 10 iterations
+- `orchestrator/maker/` package: executor, state, safety, prompts, iterative_goal
+- `PowerShellAdapter` wired into dispatcher; `@goal` parser entry-point
+- `Intent.kind="goal"` routes directly to `IterativeGoalExecutor.run()` (bypasses tool retry loop)
+- Full spec: `01.Project_Management/MAKER_spec.md`. Build cards: `01.Project_Management/Maker_build.md`.
+
+### Phase 3 — Autonomy + Observability
 - @Desktop computer use (separate design phase before building)
 - Calendar, GitHub adapters
 - JSON audit log + loguru rotation
@@ -501,11 +468,8 @@ Single uvicorn worker means web/Telegram traffic and WS connections share one pr
 | Risk | Mitigation |
 |------|-----------|
 | Cloudflare Tunnel flap | Telegram retries failed webhook; cloudflared restarts via Windows service |
-| Claude Code zombie procs | Reaper every 60s; PID in sessions; `CREATE_NEW_PROCESS_GROUP` |
 | Token cost runaway | YAML hard-kill on $5/day breach; pre-dispatch budget check |
 | Session loss on reboot | SQLite WAL persists everything |
-| Sub-agent context bleed | Per-session workspace; scrubbed env; CTO FileWriteAdapter scoped to its workspace |
-| RAM exhaustion (2x CTO procs) | Hard cap 2 concurrent in spawner; kill oldest on breach |
 | Scheduler crash | Separate subprocess; restart loop in run.ps1; missed runs skipped via `misfire_grace_time=300` |
 | WebSocket cross-worker push | Solved by single-uvicorn-worker + events table polling |
 | FileWrite path escape | Resolve + realpath + is_relative_to, plus caller-scoped allowlists |
@@ -516,10 +480,10 @@ Single uvicorn worker means web/Telegram traffic and WS connections share one pr
 
 ## Testing Strategy
 
-- **Unit:** intent parser, mode FSM, YAML loader, error mapping, escalation resolution algorithm, path validation, NDJSON envelope parser, plan validation against adapter manifests. Pure functions, no I/O.
-- **Integration:** each adapter against real service or recorded fixture. SQLite round-trip. Spawner with real claude.exe. CTO FileWrite scope enforcement (assert session A cannot write to session B workspace). Cross-process events delivery (write event in scheduler process → consume in API process).
-- **E2E (MVP gate):** see Verification Plan in plan v3.
-- **Smoke (Phase 2):** 20 scripted intents through both channels.
+- **Unit:** intent parser, mode FSM, YAML loader, error mapping, escalation resolution algorithm, path validation, plan validation against adapter manifests. MAKER: state dataclasses, prompts (format_steps, goal_achieved), executor (happy path, timeout, non-zero exit). Pure functions, no I/O.
+- **Integration:** each adapter against real service or recorded fixture. SQLite round-trip. FileWrite scope enforcement (assert JOB_RUNNER from job A cannot write to job B workspace). Cross-process events delivery (write event in scheduler process → consume in API process).
+- **E2E (MAKER gate — M10):** user `@goal` → 1–3 iterations → goal-achieved → Result with cost & latency.
+- **Smoke (Phase 3):** 20 scripted intents through both channels.
 
 ---
 
@@ -528,19 +492,19 @@ Single uvicorn worker means web/Telegram traffic and WS connections share one pr
 - Do not expose Web UI externally.
 - Do not log secrets.
 - Do not run more than 1 uvicorn worker (breaks cross-worker WS push).
-- Do not run more than 2 concurrent CTO subprocesses.
 - Do not use Kubernetes or Docker.
 - Do not use Redis.
 - Do not call Claude API on every scheduled job execution (job runner is deterministic).
-- Do not use the two-call sub-agent pattern (CTO output → second Claude call to rephrase). Use NDJSON envelope + templated wrappers; LLM synthesis only when CTO sets `summary_needed=true`.
-- Do not allow CTO subagent to write outside its own workspace.
 - Do not allow PA to write outside `jobs/`, `config/interests.md`, `config/templates/`, or its own session workspace.
+- Do not allow JOB_RUNNER to write outside its scoped workspace.
 - Do not silently retry past `max_attempts` — escalate to user.
 - Do not use POSIX-only process APIs (`prctl`, `SIGTERM`, `SIGKILL`). Windows: `subprocess.terminate()` / `.kill()`.
-- Do not build `@Desktop` open shell. Phase 1.2 is stub; Phase 2 is allowlisted computer-use only.
+- Do not build `@Desktop` open shell. Phase 1.2 is stub; Phase 3 is allowlisted computer-use only.
 - Do not use APScheduler 4.x (beta). Use 3.10.
 - Do not store history as JSON in sessions row. Use `messages` table with per-row token counts.
 - Do not put `pending_escalation` on sessions row. Use `escalations` table.
+- Do not write to `cost_ledger` from inside MAKER — `claude_api.py` already records rows on every invoke; MAKER only sums `Result.cost_usd`.
+- Do not retry analyzers within the same MAKER iteration — analyzer failure budget is the iteration cap.
 
 ---
 
@@ -550,7 +514,7 @@ Before starting any implementation task, check this table. Skills are in `.claud
 
 | You are about to… | Run first |
 |---|---|
-| Implement a numbered build step from `build.md` | `/build-step <N>` |
+| Implement a numbered build step from `BUILD_STATUS.md` | `/build-step <N>` |
 | Create a new Tool Protocol adapter | `/new-adapter <name>` |
 
 **How skills work:** each skill file contains the full procedure, embedded constraints, and the required output format. Read the skill before writing any code — it overrides your defaults for that task.
@@ -561,11 +525,16 @@ Before starting any implementation task, check this table. Skills are in `.claud
 
 ## Cross-References
 
-- Build sequence: `01.Project_Management/build.md`
-- Architecture diagram: `01.Project_Management/arch_diagram.md`
+- Agent cold-start guide: `01.Project_Management/AGENT_ONBOARDING.md`
+- Live build board: `01.Project_Management/build_status.md`
+- MAKER authoritative spec: `01.Project_Management/MAKER_spec.md`
+- MAKER per-step build cards: `01.Project_Management/Maker_build.md`
+- Project vision (PA + MAKER + worker hierarchy): `01.Project_Management/Project_Vision.md`
+- Execution plan (deprecated — RAG-first design superseded): `01.Project_Management/Execution_Plan.md`
 - Job system spec: `01.Project_Management/job-system.md`
 - Adapter contracts: `01.Project_Management/adapter-spec.md`
-- Sub-agent envelope spec: `01.Project_Management/sub-agent-pattern.md`
 - Security model: `01.Project_Management/security-model.md`
 - Escalation state machine: `01.Project_Management/escalation-model.md`
+- Phase-1 build sequence (historical): `01.Project_Management/build.phase1.archive.md`
+- Phase-1 architecture diagram (historical): `01.Project_Management/arch_diagram.phase1.archive.md`
 - Original audit plan (with rationale per item): `.claude/plans/this-example-of-pdf-twinkling-kite.md`

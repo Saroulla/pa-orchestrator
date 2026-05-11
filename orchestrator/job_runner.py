@@ -5,7 +5,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH   = REPO_ROOT / "orchestrator.db"
 JOBS_DIR  = REPO_ROOT / "jobs"
 

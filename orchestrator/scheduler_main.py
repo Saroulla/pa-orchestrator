@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = REPO_ROOT / "orchestrator.db"
 DB_URL = f"sqlite:///{DB_PATH}"
 

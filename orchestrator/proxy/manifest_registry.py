@@ -8,7 +8,6 @@ def get_manifest_registry() -> dict:
     Phase 1.2 adapters included if importable (fail silently if not installed).
     """
     from orchestrator.proxy.adapters.claude_api import ClaudeAPIAdapter
-    from orchestrator.proxy.adapters.claude_code import ClaudeCodeAdapter
     from orchestrator.proxy.adapters.brave_search import BraveSearchAdapter
     from orchestrator.proxy.adapters.file_read import FileReadAdapter
     from orchestrator.proxy.adapters.file_write import FileWriteAdapter
@@ -20,12 +19,6 @@ def get_manifest_registry() -> dict:
             registry[inst.name] = inst.manifest
         except Exception:
             pass
-    try:
-        from unittest.mock import MagicMock
-        cc = ClaudeCodeAdapter(spawner=MagicMock(), claude_api=MagicMock())
-        registry[cc.name] = cc.manifest
-    except Exception:
-        pass
 
     # Phase 1.2 — optional
     for mod_path, cls_name in [

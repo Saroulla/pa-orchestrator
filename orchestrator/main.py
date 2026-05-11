@@ -32,6 +32,8 @@ from orchestrator.proxy.adapters.file_read import FileReadAdapter
 from orchestrator.proxy.adapters.file_write import FileWriteAdapter
 from orchestrator.proxy.adapters.pdf_extract import PDFExtractAdapter
 from orchestrator.proxy.adapters.playwright_web import PlaywrightWebAdapter
+from orchestrator.maker.iterative_goal import IterativeGoalExecutor
+from orchestrator.proxy.adapters.powershell import PowerShellAdapter
 from orchestrator.proxy.adapters.template_render import TemplateRenderAdapter
 from orchestrator.proxy.dispatcher import Dispatcher
 from orchestrator.auth import router as auth_router, verify_session
@@ -41,7 +43,7 @@ from orchestrator.tokens import count as count_tokens
 logger = logging.getLogger(__name__)
 
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = REPO_ROOT / "orchestrator.db"
 GUARDRAILS_PATH = REPO_ROOT / "config" / "guardrails.yaml"
 
@@ -160,6 +162,15 @@ def _make_chat_handler(app: FastAPI):
                 "latency_ms": int((time.monotonic() - t0) * 1000),
             }
 
+        # 6b. Bare @goal — return usage rather than dispatching an empty-goal LLM run
+        if intent.kind == "goal" and not intent.payload.get("text", "").strip():
+            return {
+                "response": "[PA]> Usage: @goal <what you want done>",
+                "mode": current_mode.value,
+                "cost_usd": 0.0,
+                "latency_ms": int((time.monotonic() - t0) * 1000),
+            }
+
         # 7. Budget check
         cost_so_far = await store.get_session_cost(db, session_id)
         if cost_so_far >= config.budgets.per_session_usd_per_day:
@@ -251,7 +262,18 @@ def _make_chat_handler(app: FastAPI):
 
         result = await dispatcher.dispatch(intent, db)
         if result.ok:
-            response_text = result.data or ""
+            if isinstance(result.data, dict) and "goal_state" in result.data:
+                gs = result.data["goal_state"]
+                iter_count = len(gs.iterations)
+                goal_latency_ms = result.meta.get("latency_ms", 0)
+                response_text = (
+                    f"Goal {'achieved' if gs.achieved else 'NOT achieved'} "
+                    f"in {iter_count} iteration{'s' if iter_count != 1 else ''} "
+                    f"(cost ${result.cost_usd:.4f}, {goal_latency_ms} ms).\n\n"
+                    f"{gs.final_summary or '(no summary)'}"
+                )
+            else:
+                response_text = result.data or ""
             if result.cost_usd:
                 await store.increment_session_cost(db, session_id, result.cost_usd)
         else:
@@ -281,7 +303,7 @@ def _make_chat_handler(app: FastAPI):
         return {
             "response": formatted,
             "mode": current_mode.value,
-            "cost_usd": 0.0,
+            "cost_usd": result.cost_usd,
             "latency_ms": latency_ms,
         }
 
@@ -308,12 +330,16 @@ async def lifespan(app: FastAPI):
     brave_search = BraveSearchAdapter()
     file_read = FileReadAdapter()
     file_write = FileWriteAdapter()
+    powershell = PowerShellAdapter()
 
-    dispatcher = Dispatcher(config_getter=get_config, escalation_module=escalation)
+    ige = IterativeGoalExecutor(claude_adapter=claude_api, ps_adapter=powershell)
+
+    dispatcher = Dispatcher(config_getter=get_config, escalation_module=escalation, goal_executor=ige)
     dispatcher.register(claude_api,   kind="reason")
     dispatcher.register(brave_search, kind="search")
     dispatcher.register(file_read,    kind="file_read")
     dispatcher.register(file_write,   kind="file_write")
+    dispatcher.register(powershell,   kind="powershell")
 
     playwright = PlaywrightWebAdapter()
     pdf_extract = PDFExtractAdapter()
@@ -363,8 +389,6 @@ async def lifespan(app: FastAPI):
             await consumer_task
         except (asyncio.CancelledError, Exception):
             pass
-
-        await spawner.stop_reaper()
 
         try:
             observer.stop()

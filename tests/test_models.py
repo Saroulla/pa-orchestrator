@@ -28,7 +28,6 @@ SID = "sess-abcd1234"
 
 def test_mode_values():
     assert Mode.PA == "PA"
-    assert Mode.CTO == "CTO"
     assert Mode.DESKTOP == "DESKTOP"
 
 
@@ -39,7 +38,6 @@ def test_channel_values():
 
 def test_caller_values():
     assert Caller.PA == "pa"
-    assert Caller.CTO_SUBAGENT == "cto_subagent"
     assert Caller.JOB_RUNNER == "job_runner"
 
 
@@ -169,7 +167,7 @@ def test_error_detail_retriable_false():
 ])
 def test_intent_all_kinds(kind):
     i = Intent(kind=kind, payload={"k": "v"}, session_id=SID,
-               mode=Mode.CTO, caller=Caller.CTO_SUBAGENT, deadline_s=10.0)
+               mode=Mode.PA, caller=Caller.JOB_RUNNER, deadline_s=10.0)
     assert i.kind == kind
 
 
@@ -240,7 +238,7 @@ def test_session_defaults():
 
 def test_session_full():
     s = Session(
-        id=SID, channel=Channel.TELEGRAM, mode=Mode.CTO,
+        id=SID, channel=Channel.TELEGRAM, mode=Mode.DESKTOP,
         cc_pid=1234, telegram_chat_id=999,
         cost_to_date_usd=1.5, summary_anchor="prev summary",
         created_at=TS, last_active=TS,

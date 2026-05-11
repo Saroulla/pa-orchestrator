@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = REPO_ROOT / "orchestrator.db"
 _MAX_RETRIES = 2
 _PLAN_DEADLINE_S = 60.0

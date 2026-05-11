@@ -14,7 +14,7 @@ from orchestrator.models import (
     Result,
 )
 
-REPO_ROOT = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class FileReadAdapter:

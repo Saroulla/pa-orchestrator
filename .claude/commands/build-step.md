@@ -19,7 +19,7 @@ Implement one numbered step from the build sequence.
 | `todo` and all dependencies `done` | **Claim it.** Edit `BUILD_STATUS.md`: change `todo` → `in_progress \| YYYY-MM-DD HH:MM` for step N only. Then continue to Phase 1. |
 
 3. Read step N from `01.Project_Management/build.md` in full.
-4. Read any spec files referenced by that step (e.g. `security-model.md`, `sub-agent-pattern.md`, `escalation-model.md`).
+4. Read any spec files referenced by that step (e.g. `security-model.md`, `escalation-model.md`).
 
 ---
 
@@ -95,6 +95,5 @@ Do not mark done until the user explicitly confirms the gate passes.
 - **SQLite PRAGMAs on every connection.** `journal_mode=WAL; synchronous=NORMAL; busy_timeout=5000`.
 - **No `--loop uvloop` on uvicorn.** Not supported on Windows. Use default loop.
 - **Secrets never logged.** Audit log has redaction filter. `.env` never committed.
-- **CTO subprocess stdout is NDJSON only.** Non-conformant stdout goes to stderr. See `01.Project_Management/sub-agent-pattern.md`.
 - **FileWriteAdapter requires `caller` and `scope_id`.** Never instantiate without them. See `01.Project_Management/security-model.md`.
 - **session_id regex:** `^[a-zA-Z0-9_-]{8,64}$` — enforce at session creation in `store.py`.

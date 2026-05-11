@@ -5,7 +5,6 @@ A single-node AI orchestrator running on a Windows mini PC. One Python service p
 ## What it does
 
 - **Chat** — talk to the PA via a browser terminal or Telegram. The PA reasons using the Claude API with per-session conversation history, context compression, and cost tracking.
-- **CTO mode** — type `@CTO` to spawn a Claude Code sub-agent that can write, read, and execute code inside a sandboxed session workspace. Output streams back through the PA.
 - **Scheduled jobs** — describe a recurring task in plain English; the PA generates a deterministic YAML execution plan and runs it on a cron schedule with zero LLM calls at runtime.
 - **Adapters** — Brave Search, file read/write (caller-scoped), Playwright web automation, PDF extraction, email sending, and Jinja2 templates.
 
@@ -18,7 +17,6 @@ Browser / Telegram
        │
   Proxy Layer → Intent → Dispatcher → Adapters
                                     ├── Claude API (streaming SSE)
-                                    ├── Claude Code (NDJSON subprocess)
                                     ├── Brave Search
                                     ├── File Read / Write
                                     ├── Playwright
@@ -113,7 +111,6 @@ Edit `config/guardrails.yaml` — changes hot-reload without restart:
 models:
   pa_chat: "claude-haiku-4-5-20251001"   # regular conversation
   summarize: "claude-haiku-4-5-20251001" # history compression
-  cto_brief: "claude-sonnet-4-6"         # CTO task planning
   plan_author: "claude-sonnet-4-6"       # job plan generation
 ```
 
@@ -123,8 +120,7 @@ Daily spend cap is also in `guardrails.yaml` under `budgets.per_session_usd_per_
 
 | Command | Effect |
 |---------|--------|
-| `@CTO` | Switch to CTO sub-agent mode |
-| `@PA` | Switch back to PA |
+| `@PA` | Return to PA mode |
 | `@cost` | Check today's API spend |
 | `@rebuild-plan jobs/<name>.md` | Regenerate execution plan for a job |
 | `@remember <text>` | Update interest profile |

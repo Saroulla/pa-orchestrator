@@ -1,7 +1,6 @@
 models:
   pa_chat: "claude-haiku-4-5-20251001"
   summarize: "claude-haiku-4-5-20251001"
-  cto_brief: "claude-sonnet-4-6"
   plan_author: "claude-sonnet-4-6"
 
 failure_policy:
@@ -33,7 +32,6 @@ escalation:
 
 tool_access:
   claude_api:   enabled
-  claude_code:  enabled
   brave_search: enabled
   file_read:    enabled
   file_write:   enabled
@@ -44,17 +42,10 @@ tool_access:
 
 file_write:
   max_bytes: 10485760
-  enabled_for: [pa, cto_subagent, job_runner]
+  enabled_for: [pa, job_runner]
 
 context_switch:
-  pa_to_cto:     allowed
-  cto_to_pa:     allowed
   pa_to_desktop: stub_only
-
-sub_agent:
-  hard_cap_concurrent: 2
-  idle_kill_minutes: 15
-  workspace_size_mb: 500
 
 logging:
   destination: file

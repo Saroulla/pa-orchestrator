@@ -27,7 +27,7 @@ class Tool(Protocol):
         deadline_s: float,
         caller: Caller,
     ) -> AsyncIterator[StreamEvent]:
-        """Optional. Used for streaming adapters (claude_api, claude_code)."""
+        """Optional. Used for streaming adapters (claude_api)."""
         ...
 
     async def health(self) -> bool: ...
@@ -80,34 +80,12 @@ Notes: system prompt + summary_anchor sent with `cache_control: ephemeral` for p
 
 ---
 
-### 2. ClaudeCodeAdapter (`claude_code.py`)
-
-| Aspect | Value |
-|--------|-------|
-| `name` | `"claude_code"` |
-| `allowed_callers` | `{PA}` |
-| Operations | `send_to_cto` |
-| Streaming | Yes — yields PA-wrapped phases as they arrive |
-| Cost | claude.exe internal usage; reported via the CLI's billing output if available; otherwise estimated by the spawner |
-
-Operations:
-```python
-send_to_cto:
-  required: { session_id: str, text: str }
-  allowed:  { brief_update: bool }    # if true, prefixes with [brief-update]
-  returns:  "data: stream of PA-wrapped phases (action lines + final result)"
-```
-
-Internals: writes to existing claude.exe stdin; reads NDJSON envelope from stdout; parses + applies wrappers per `sub-agent-pattern.md`.
-
----
-
-### 3. BraveSearchAdapter (`brave_search.py`)
+### 2. BraveSearchAdapter (`brave_search.py`)
 
 | Aspect | Value |
 |--------|-------|
 | `name` | `"brave_search"` |
-| `allowed_callers` | `{PA, CTO_SUBAGENT, JOB_RUNNER}` |
+| `allowed_callers` | `{PA, JOB_RUNNER}` |
 | Operations | `search` |
 | Cost | Free tier; counted against API quota |
 
@@ -128,7 +106,7 @@ search:
 | Aspect | Value |
 |--------|-------|
 | `name` | `"file_read"` |
-| `allowed_callers` | `{PA, CTO_SUBAGENT, JOB_RUNNER}` |
+| `allowed_callers` | `{PA, JOB_RUNNER}` |
 | Operations | `read`, `read_chunked` |
 
 Operations:
@@ -153,7 +131,7 @@ Path scoped per `security-model.md`. Max read size 50 MB.
 | Aspect | Value |
 |--------|-------|
 | `name` | `"file_write"` |
-| `allowed_callers` | `{PA, CTO_SUBAGENT, JOB_RUNNER}` |
+| `allowed_callers` | `{PA, JOB_RUNNER}` |
 | Operations | `write`, `append` |
 
 Operations:
@@ -180,7 +158,7 @@ Caller-scoped allowlist + atomic writes per `security-model.md`. Max 10 MB per w
 | Aspect | Value |
 |--------|-------|
 | `name` | `"playwright_web"` |
-| `allowed_callers` | `{PA, CTO_SUBAGENT, JOB_RUNNER}` |
+| `allowed_callers` | `{PA, JOB_RUNNER}` |
 | Operations | `fetch_url`, `extract_links_top_n`, `extract_text`, `screenshot`, `submit_form` |
 
 Operations:
@@ -220,7 +198,7 @@ Auth state: `sessions/{scope_id}/.playwright-auth/state.json` for sites needing 
 | Aspect | Value |
 |--------|-------|
 | `name` | `"pdf_extract"` |
-| `allowed_callers` | `{PA, CTO_SUBAGENT, JOB_RUNNER}` |
+| `allowed_callers` | `{PA, JOB_RUNNER}` |
 | Operations | `extract_text`, `extract_text_chunked`, `extract_metadata` |
 
 Operations:
@@ -293,7 +271,6 @@ Jinja2 environment loading from `config/templates/`. Special context vars always
 ```python
 ADAPTER_MANIFESTS: dict[str, AdapterManifest] = {
     "claude_api":      ClaudeAPIAdapter.manifest,
-    "claude_code":     ClaudeCodeAdapter.manifest,
     "brave_search":    BraveSearchAdapter.manifest,
     "file_read":       FileReadAdapter.manifest,
     "file_write":      FileWriteAdapter.manifest,
@@ -314,7 +291,6 @@ PA's plan-author flow exports this registry as JSON to the Claude API system pro
 | Adapter | Default `on_error` policy in job plans |
 |---------|-----------------------------------------|
 | claude_api | retry then escalate |
-| claude_code | retry then escalate |
 | brave_search | fail_silent (per guardrails) |
 | file_read | escalate |
 | file_write | escalate |

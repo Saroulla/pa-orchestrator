@@ -16,7 +16,7 @@ from orchestrator.models import (
 )
 
 # Hardcoded repo root — tests monkeypatch this module attribute.
-REPO_ROOT: Path = Path("C:/Users/Mini_PC/_REPO")
+REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 
 MAX_WRITE_BYTES: int = 10_485_760  # 10 MB
 

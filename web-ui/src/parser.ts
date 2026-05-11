@@ -1,11 +1,11 @@
-export type KnownCommand = '@PA' | '@CTO' | '@cost' | '@Desktop' | '@rebuild-plan'
+export type KnownCommand = '@PA' | '@cost' | '@Desktop' | '@rebuild-plan'
 
 export type CommandResult = {
   command: KnownCommand | null
   rest: string
 }
 
-const COMMANDS: KnownCommand[] = ['@PA', '@CTO', '@cost', '@Desktop', '@rebuild-plan']
+const COMMANDS: KnownCommand[] = ['@PA', '@cost', '@Desktop', '@rebuild-plan']
 
 export function detectCommand(text: string): CommandResult {
   const trimmed = text.trimStart()

@@ -8,8 +8,8 @@ Single-user system, but with autonomous agents writing files. The threats to pre
 
 1. **Path traversal** — adapter writes outside intended directory via `../../etc/passwd`
 2. **Symlink/junction escape** — Windows junction points pointing outside the sandbox
-3. **Caller confusion** — CTO sub-agent writes to `jobs/` (which only PA should touch)
-4. **Cross-session contamination** — CTO from session A writes into session B's workspace
+3. **Caller confusion** — JOB_RUNNER writes to `jobs/` (which only PA should touch)
+4. **Cross-session contamination** — JOB_RUNNER from job A writes into job B's workspace
 5. **Disk fill** — runaway adapter writes 100GB file
 6. **Race / partial writes** — file appears half-written and downstream tools choke
 
@@ -22,7 +22,6 @@ Every adapter invocation carries a `caller: Caller` parameter.
 ```python
 class Caller(StrEnum):
     PA = "pa"
-    CTO_SUBAGENT = "cto_subagent"
     JOB_RUNNER = "job_runner"
 ```
 
@@ -30,7 +29,6 @@ Each adapter declares `allowed_callers: set[Caller]`. The dispatcher checks `int
 
 `caller` is set by the dispatcher based on context:
 - `main.py` chat handler → `Caller.PA`
-- `claude_code.py` adapter (when CTO requests a tool) → `Caller.CTO_SUBAGENT`
 - `job_runner.py` → `Caller.JOB_RUNNER`
 
 Callers cannot be spoofed by the user — they are set by trusted code paths.
@@ -55,12 +53,6 @@ def compute_allowed_roots(caller: Caller, scope_id: str | None) -> list[Path]:
             _validate_session_id(scope_id)
             roots.append(sessions_root / scope_id / "workspace")
         return roots
-
-    if caller == Caller.CTO_SUBAGENT:
-        if not scope_id:
-            raise ValueError("CTO_SUBAGENT caller requires scope_id (session_id)")
-        _validate_session_id(scope_id)
-        return [sessions_root / scope_id / "workspace"]
 
     if caller == Caller.JOB_RUNNER:
         if not scope_id:
@@ -123,7 +115,7 @@ From `guardrails.yaml`:
 ```yaml
 file_write:
   max_bytes: 10485760              # 10 MB per write
-  enabled_for: [pa, cto_subagent, job_runner]
+  enabled_for: [pa, job_runner]
 ```
 
 `FileWriteAdapter.invoke` rejects writes exceeding `max_bytes` with `Result(ok=False, error=BAD_INPUT, message="size cap exceeded")`.
@@ -159,27 +151,18 @@ Guarantees:
 
 ---
 
-## FileReadAdapter — same caller scoping (read side)
+## FileReadAdapter — read scope
 
-Read scope is broader than write but still caller-restricted:
+Read scope is broader than write:
 
 | Caller | Read roots |
 |--------|------------|
-| PA | `jobs/`, `config/`, `sessions/{active_id}/`, `logs/` (read-only audit) |
-| CTO_SUBAGENT | `sessions/{their_id}/` only |
-| JOB_RUNNER | `jobs/{their_job_id}.md`, `config/templates/`, `sessions/{their_job_id}/` |
+| PA | `config/`, `jobs/`, `sessions/` |
+| JOB_RUNNER | `config/`, `jobs/`, `sessions/` |
 
 Same path validation algorithm; just a different allowlist function.
 
 Max read size: 50 MB (configurable). Larger files return `BAD_INPUT`; chunked read can be added if needed.
-
----
-
-## CTO sub-agent file scope
-
-CTO's `FileWriteAdapter` is initialised with `caller=CTO_SUBAGENT, scope_id=its_session_id` — set when the spawner instantiates the adapter for that subprocess context. CTO physically cannot write outside its own workspace because the allowlist excludes everything else.
-
-This is enforced both by the adapter and by the spawner: the per-session `.claude/CLAUDE.md` tells CTO "your workspace is `{path}`; do not write elsewhere", and the adapter refuses any path that resolves outside that root.
 
 ---
 
@@ -198,7 +181,7 @@ Not directly path security but related:
 ## Secrets handling
 
 - `.env` is the only place secrets live; `.gitignore` excludes it
-- Spawner scrubs subprocess env: only `PATH`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, and an explicit allowlist passed (no API keys unless the sub-agent needs them)
+- Subprocess env scrubbed: only `PATH`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, and an explicit allowlist passed (no API keys unless required)
 - Audit logs apply a redaction filter for known secret patterns (Anthropic keys begin with `sk-ant-`, Telegram tokens are digits + `:` + 35 alphanumerics, etc.)
 
 ---
@@ -206,9 +189,9 @@ Not directly path security but related:
 ## Test plan
 
 - Unit: each invalid path (`../`, absolute outside repo, junction pointing outside) rejected with PermissionError
-- Unit: each valid path (PA writes `jobs/foo.md`, CTO writes own workspace) accepted
-- Unit: cross-session attack — CTO from session A writes to session B's workspace → rejected
-- Unit: caller mismatch — CTO calls FileWrite with `Caller.PA` (spoofed) — dispatcher rejects before adapter sees it
+- Unit: each valid path (PA writes `jobs/foo.md`, JOB_RUNNER writes own scoped workspace) accepted
+- Unit: cross-session attack — JOB_RUNNER from job A writes to job B's workspace → rejected
+- Unit: caller mismatch — JOB_RUNNER calls FileWrite with `Caller.PA` (spoofed) — dispatcher rejects before adapter sees it
 - Unit: session_id with `/` or `..` rejected at validation
 - Unit: 12 MB write rejected with BAD_INPUT
 - Integration: write `jobs/test.md` via real FileWriteAdapter; assert `os.replace` semantics (no partial file appears)

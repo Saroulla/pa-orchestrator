@@ -101,7 +101,7 @@ Sonnet writes results to C:\reports\daily.md
 
 ## Architectural Principles
 
-1. **Single User, Single Process** — No multi-tenancy. One FastAPI worker (1 uvicorn), one optional async scheduler, spawned sub-agents are temporary
+1. **Single User, Single Process** — No multi-tenancy. One FastAPI worker (1 uvicorn), one optional async scheduler, MAKER subprocess work is temporary
 2. **Deterministic MAKER** — Job executor (PowerShell, chunking, retrieval) is pure functions; zero LLM calls unless user initiates
 3. **Cheap Workers, Expensive Synthesizers** — Haiku parallelism for grunt work; Sonnet for judgment calls
 4. **Ephemeral Knowledge** — Per-session vector storage; no lifetime persistence (user can export reports/findings if needed)
@@ -202,7 +202,7 @@ Sonnet writes results to C:\reports\daily.md
 - Multi-user collaboration (single-user system)
 - Real-time streaming of intermediate worker results (synthesis happens after workers complete)
 - Groq integration (post-MVP experiment in `experiments/`)
-- CTO mode / code-generation sub-agent (Claude Code on iOS handles this separately)
+- Code-generation sub-agent (Claude Code on iOS handles this separately)
 
 ---
 

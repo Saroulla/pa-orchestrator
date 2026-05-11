@@ -107,7 +107,7 @@ async def test_rate_limit_429_is_fail_silent():
         result = await ADAPTER.invoke(
             {"query": "test"},
             deadline_s=10.0,
-            caller=Caller.CTO_SUBAGENT,
+            caller=Caller.JOB_RUNNER,
         )
 
     assert result.ok is True, "fail_silent: ok must be True even on 429"
@@ -140,10 +140,10 @@ async def test_server_error_500_is_fail_silent():
 # ---------------------------------------------------------------------------
 
 async def test_unauthorized_caller_returns_unauthorized():
-    # BraveSearch allows all three Caller values by default.
+    # BraveSearch allows PA and JOB_RUNNER by default.
     # Override allowed_callers on this instance to make PA unauthorized.
     adapter = BraveSearchAdapter()
-    adapter.allowed_callers = {Caller.CTO_SUBAGENT}
+    adapter.allowed_callers = {Caller.JOB_RUNNER}
 
     result = await adapter.invoke(
         {"query": "test"},

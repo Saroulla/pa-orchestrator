@@ -8,7 +8,7 @@ from typing import Any
 
 import aiosqlite
 
-DB_PATH = Path("C:/Users/Mini_PC/_REPO/orchestrator.db")
+DB_PATH = Path(__file__).resolve().parents[1] / "orchestrator.db"
 
 _SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
 

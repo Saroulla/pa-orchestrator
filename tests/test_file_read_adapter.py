@@ -1,13 +1,11 @@
 """Unit tests for FileReadAdapter — Step 9d gate.
 
-All seven required test cases are covered:
+Covered cases:
 1. PA reads file inside config/                  → ok
-2. PA reads file with ../../ traversal            → UNAUTHORIZED
-3. CTO_SUBAGENT reads its own workspace           → ok
-4. CTO_SUBAGENT reads another session's workspace → UNAUTHORIZED
-5. File does not exist                            → TOOL_ERROR
-6. File over 50 MB (stat mocked)                 → BAD_INPUT
-7. Symlink pointing outside allowed root          → UNAUTHORIZED
+2. PA reads file with ../../ traversal           → UNAUTHORIZED
+3. File does not exist                           → TOOL_ERROR
+4. File over 50 MB (stat mocked)                 → BAD_INPUT
+5. Symlink pointing outside allowed root         → UNAUTHORIZED
 """
 import asyncio
 import os
@@ -20,7 +18,6 @@ from orchestrator.models import Caller, ErrorCode
 from orchestrator.proxy.adapters.file_read import FileReadAdapter
 
 OWN_SESSION = "test-sess-01"
-OTHER_SESSION = "test-sess-02"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -96,54 +93,7 @@ def test_absolute_path_outside_roots_rejected(tmp_path: Path):
     assert result.error.code == ErrorCode.UNAUTHORIZED
 
 
-# ── 3. CTO_SUBAGENT reads inside its own workspace ───────────────────────────
-
-def test_cto_reads_own_workspace(tmp_path: Path):
-    workspace = tmp_path / "sessions" / OWN_SESSION / "workspace"
-    workspace.mkdir(parents=True)
-    target = workspace / "code.py"
-    target.write_text("print('hello')")
-
-    result = invoke(tmp_path, str(target), Caller.CTO_SUBAGENT, session_id=OWN_SESSION)
-
-    assert result.ok
-    assert result.data["content"] == "print('hello')"
-
-
-# ── 4. CTO_SUBAGENT reads another session's workspace → UNAUTHORIZED ──────────
-
-def test_cto_cannot_read_other_session(tmp_path: Path):
-    # Victim's workspace
-    other_ws = tmp_path / "sessions" / OTHER_SESSION / "workspace"
-    other_ws.mkdir(parents=True)
-    (other_ws / "secret.py").write_text("secret")
-
-    # CTO identifies as OWN_SESSION but tries to read OTHER_SESSION's file
-    result = invoke(
-        tmp_path,
-        str(other_ws / "secret.py"),
-        Caller.CTO_SUBAGENT,
-        session_id=OWN_SESSION,
-    )
-
-    assert not result.ok
-    assert result.error.code == ErrorCode.UNAUTHORIZED
-
-
-def test_cto_missing_session_id_rejected(tmp_path: Path):
-    result = run(
-        adapter(tmp_path).invoke(
-            {"path": str(tmp_path / "config" / "x.txt")},  # no session_id
-            30.0,
-            Caller.CTO_SUBAGENT,
-        )
-    )
-
-    assert not result.ok
-    assert result.error.code == ErrorCode.BAD_INPUT
-
-
-# ── 5. File does not exist → TOOL_ERROR ──────────────────────────────────────
+# ── 3. File does not exist → TOOL_ERROR ──────────────────────────────────────
 
 def test_file_not_found(tmp_path: Path):
     cfg = tmp_path / "config"

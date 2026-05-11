@@ -170,7 +170,7 @@ WAL mode + `busy_timeout=5000` means contention is handled gracefully without su
 
 ## Stacked escalations
 
-Rare but possible — e.g. a job notification arrives while a CTO confirmation is pending. We keep the model simple:
+Rare but possible — e.g. a job notification arrives while a goal-execution confirmation is pending. We keep the model simple:
 
 - `ORDER BY created_at DESC LIMIT 1` — newest pending wins
 - Older pending ones remain until they expire or get explicitly resolved (PA can resolve them programmatically when context is clear)
@@ -195,7 +195,7 @@ Notification routing (web vs telegram) follows the standard events_consumer flow
 ## Edge cases
 
 - **User sends sticker on Telegram while escalation pending** — no text, no match → auto-cancel + passthrough (which will then not produce useful response since there's no text; PA replies "I didn't catch that").
-- **User sends `@CTO ...` while escalation pending** — full message has no whitespace-trimmed match against `a`/`b`, so it auto-cancels and the new `@CTO` switch is processed normally. This is the right behaviour: explicit new commands take precedence.
+- **User sends a new `@command` while escalation pending** — full message has no whitespace-trimmed match against `a`/`b`, so it auto-cancels and the new command is processed normally. This is the right behaviour: explicit new commands take precedence.
 - **User types `A` (uppercase)** — case-folded to `a`, matches.
 - **User types `a.` or `a ` with trailing punctuation** — strip trims whitespace; trailing `.` causes mismatch and auto-cancel. Documented quirk; could be relaxed in Phase 2 (regex `^[a-z]\b`).
 - **Escalation created by job_runner (Process 2) while user has live WS to FastAPI (Process 1)** — escalation_created event surfaces via events_consumer; user sees the prompt; replies on the same WS; FastAPI resolves atomically.

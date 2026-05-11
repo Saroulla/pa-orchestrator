@@ -114,7 +114,7 @@ PlaywrightWebManifest = AdapterManifest(
             "returns": "data: list[{title, url}]",
         },
     },
-    allowed_callers={Caller.PA, Caller.CTO_SUBAGENT, Caller.JOB_RUNNER},
+    allowed_callers={Caller.PA, Caller.JOB_RUNNER},
 )
 ```
 

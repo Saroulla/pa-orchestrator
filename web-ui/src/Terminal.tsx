@@ -6,14 +6,14 @@ import type { UiSettings } from './Settings'
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
-type Mode = 'PA' | 'CTO' | 'DESKTOP'
+type Mode = 'PA' | 'DESKTOP'
 type LineKind = 'user' | 'assistant' | 'error' | 'escalation' | 'status'
 
 interface Line {
   id: number
   kind: LineKind
   text: string
-  speaker?: 'user' | 'pa' | 'cto'
+  speaker?: 'user' | 'pa'
   options?: Record<string, string>
 }
 
@@ -30,7 +30,6 @@ const C = {
   text:         '#1A0A02',  // near-black warm — body text (~17:1 contrast on bg)
   muted:        '#8C6054',  // warm brown — status lines, timestamps
   pa:           '#166534',  // dark green — PA/orchestrator response text
-  cto:          '#1E40AF',  // dark blue — CTO subagent response text
   red:          '#B91C1C',  // dark red — errors
   amber:        '#92400E',  // dark amber — escalation text
   escalationBg: '#FEF2E8',  // pale peach wash — escalation block background
@@ -51,7 +50,6 @@ export function agentColor(agentName: string): string {
 
 function modeAccent(mode: Mode): string {
   switch (mode) {
-    case 'CTO':     return C.cto
     case 'DESKTOP': return C.muted
     default:        return C.pa
   }
@@ -74,8 +72,6 @@ function lineStyle(line: Line, fontColor: string = C.text): React.CSSProperties 
     return SL
   if (line.speaker === 'pa')
     return { ...SL, color: C.pa }
-  if (line.speaker === 'cto')
-    return { ...SL, color: C.cto }
   return { ...SL, color: fontColor }
 }
 
@@ -89,7 +85,7 @@ export default function Terminal({ sessionId }: TerminalProps) {
   const [showSettings, setShowSettings] = useState(false)
   const [lines, setLines]             = useState<Line[]>(() => [
     { id: nextId(), kind: 'status', text: `session: ${sessionId}` },
-    { id: nextId(), kind: 'status', text: 'ready — type @CTO to enter CTO mode, @cost to check spend' },
+    { id: nextId(), kind: 'status', text: 'ready — type @cost to check spend' },
   ])
   const [pending, setPending]         = useState('')
   const [mode, setMode]               = useState<Mode>('PA')
@@ -103,7 +99,7 @@ export default function Terminal({ sessionId }: TerminalProps) {
   useEffect(() => { modeRef.current = mode }, [mode])
 
   const addLine = useCallback(
-    (kind: LineKind, text: string, options?: Record<string, string>, speaker?: 'user' | 'pa' | 'cto') => {
+    (kind: LineKind, text: string, options?: Record<string, string>, speaker?: 'user' | 'pa') => {
       setLines(prev => [...prev, { id: nextId(), kind, text, options, speaker }])
     },
     [],
@@ -126,8 +122,7 @@ export default function Terminal({ sessionId }: TerminalProps) {
       onDone: () => {
         const text = pendingRef.current
         if (text) {
-          const speaker = modeRef.current === 'CTO' ? 'cto' : 'pa'
-          addLine('assistant', text, undefined, speaker)
+          addLine('assistant', text, undefined, 'pa')
         }
         setPending('')
         setBusy(false)
@@ -184,8 +179,7 @@ export default function Terminal({ sessionId }: TerminalProps) {
 
       // Non-streaming fallback: backend sent a full response before WS token stream
       if (json.response && !pendingRef.current) {
-        const responseSpeaker = (json.mode ?? modeRef.current) === 'CTO' ? 'cto' : 'pa'
-        addLine('assistant', json.response, undefined, responseSpeaker)
+        addLine('assistant', json.response, undefined, 'pa')
         setBusy(false)
       }
       // Otherwise WS onDone commits the streamed text and clears busy

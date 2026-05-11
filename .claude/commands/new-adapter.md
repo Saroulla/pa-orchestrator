@@ -24,7 +24,7 @@ NEW ADAPTER: <name>
 File           : orchestrator/proxy/adapters/<name>.py
 Test file      : tests/unit/test_<name>_adapter.py
 Intent kind(s) : <which Intent.kind values route here>
-Allowed callers: <pa | cto_subagent | job_runner — list all that apply>
+Allowed callers: <pa | job_runner — list all that apply>
 External dep   : <library or API this adapter calls, or "none">
 scope_id needed: <yes — FileWrite pattern | no>
 Manifest params: <list of required + optional params the job runner may pass>

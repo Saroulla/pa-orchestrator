@@ -57,6 +57,10 @@ def parse(
         kind = "file_write"
         payload = {"text": remainder, "meta_command": "rebuild_plan"}
 
+    elif first == "@goal":
+        kind = "goal"
+        payload = {"text": remainder}
+
     else:
         # Not an @command (or @ appears mid-message — treat as literal).
         kind = _MODE_KIND[mode]
