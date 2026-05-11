@@ -21,47 +21,29 @@
 
 ---
 
-## Phase 1 — MVP Core
+## Manual Prerequisite (Not Tracked Here)
 
-| Step | Name | Model | Wave | Depends On | Status |
-|------|------|-------|------|------------|--------|
-| 0 | Prerequisites | Haiku | W0 | — | todo |
-| 1 | Repo skeleton | Haiku | W1 | 0 | done |
-| 2 | Core models | Sonnet | W2 | 1 | done |
-| 3 | YAML guardrails + hot-reload | Sonnet | W2 | 1 | done |
-| 4 | SQLite store | Sonnet | W3 | 2 | done |
-| 5 | Token counting + history | Sonnet | W4 | 4 | done |
-| 6 | Intent parser + Mode FSM | Sonnet | W3 | 2 | done |
-| 7 | Escalation engine | Sonnet | W4 | 4 | done |
-| 8 | Proxy dispatcher | Sonnet | W4 | 3, 5, 6 | done |
-| 9a | ClaudeAPIAdapter | Opus | W5 | 8, 5 | done |
-| 9b | ClaudeCodeAdapter | Opus | W7 | 10 | done |
-| 9c | BraveSearchAdapter | Sonnet | W5 | 8 | done |
-| 9d | FileReadAdapter | Sonnet | W5 | 8 | done |
-| 9e | FileWriteAdapter | Sonnet | W5 | 8 | done |
-| 10 | Spawner + reaper + brief generator | Opus | W6 | 9a | done |
-| 11 | FastAPI main | Opus | W8 | 9b, 9a, 9c, 9d, 9e, 6, 7, 12 | done |
-| 12 | Telegram connector | Sonnet | W4 | 4 | done |
-| 13 | PA CLAUDE.md wiring | Sonnet | W8 | 11 | done |
-| 14 | Web UI | Sonnet | W2 | 1 | done |
-| 15 | Cloudflare Tunnel | Haiku | W9 | 11 | done |
-| 16 | E2E gate test | Opus | W10 | 15 | done |
+Before M0, the CTO/spawner pattern must be removed manually. This work is **out of scope** for this status board and is not claimable as a step. See `AGENT_ONBOARDING.md` § Prerequisite for the exact list of deletions and edits. M0 (pre-flight verification) confirms the prereq is complete before any other MAKER step proceeds.
 
 ---
 
-## Phase 1.2 — Workflow Engine
+## Phase 2 — MAKER (Active)
+
+MAKER is an iterative goal-execution engine wrapping PowerShell: `Decide (Sonnet) → Execute (PowerShell) → Analyze (Haiku ×5) → Synthesize (Sonnet)`, capped at 10 iterations. Full spec at `01.Project_Management/MAKER_spec.md`. Per-step contracts at `01.Project_Management/MAKER_build.md`.
 
 | Step | Name | Model | Wave | Depends On | Status |
 |------|------|-------|------|------------|--------|
-| 17 | Scheduler subprocess | Sonnet | W11 | 16 | done |
-| 18 | Job runner | Sonnet | W11 | 16 | done |
-| 19 | PA plan-author flow + @rebuild-plan | Sonnet | W12 | 17, 18 | done |
-| 20 | PlaywrightAdapter | Sonnet | W11 | 16 | done |
-| 21 | PDFExtractAdapter | Sonnet | W11 | 16 | done |
-| 22 | EmailAdapter | Sonnet | W11 | 16 | done |
-| 23 | TemplateAdapter | Sonnet | W11 | 16 | done |
-| 24 | Async job notification | Sonnet | W12 | 17, 18 | done |
-| 25 | Interest profile read/update flow | Sonnet | W12 | 19 | done |
+| M0 | Pre-flight verification (confirms manual prereq is complete) | Haiku | W0 | — | todo |
+| M1 | `maker/` package skeleton | Haiku | W1 | M0 | todo |
+| M2 | State dataclasses (`state.py`) | Haiku | W2 | M1 | todo |
+| M3 | Safety exceptions (`safety.py`) | Haiku | W2 | M1 | todo |
+| M4 | `MAKERExecutor.run_powershell` (subprocess + asyncio + Windows kill chain) | Sonnet | W3 | M2, M3 | todo |
+| M5 | `PowerShellAdapter` (Tool wrapper around MAKERExecutor) | Sonnet | W4 | M4 | todo |
+| M6 | Prompt templates + `format_steps` + `goal_achieved` parser | Sonnet | W3 | M2 | todo |
+| M7 | `IterativeGoalExecutor` — 6-phase loop with `asyncio.gather`, cost tracking, max-iter | Opus | W5 | M4, M5, M6 | todo |
+| M8 | Unit tests for executor / state / prompts | Sonnet | W4 | M4, M6 | todo |
+| M9 | Dispatcher wiring + `@goal` parser + `Intent.kind="goal"` | Sonnet | W6 | M5, M7 | todo |
+| M10 | E2E gate: user goal → 1–3 iterations → goal-achieved → Result with cost & latency | Opus | W7 | M9 | todo |
 
 ---
 
@@ -69,16 +51,17 @@
 
 | Wave | Steps | Gate to start |
 |------|-------|---------------|
-| W0 | 0 | — |
-| W1 | 1 | Step 0 done |
-| W2 | 2, 3, 14 | Step 1 done |
-| W3 | 4, 6 | Step 2 done |
-| W4 | 5, 7, 8, 12 | Steps 3, 4, 6 all done |
-| W5 | 9a, 9c, 9d, 9e | Steps 5, 8 all done |
-| W6 | 10 | Step 9a done |
-| W7 | 9b | Step 10 done |
-| W8 | 11, 13 | Steps 9a, 9b, 9c, 9d, 9e, 6, 7, 12 all done |
-| W9 | 15 | Step 11 done |
-| W10 | 16 | Step 15 done |
-| W11 | 17, 18, 20, 21, 22, 23 | Step 16 done |
-| W12 | 19, 24, 25 | Steps 17, 18 done |
+| W0 | M0 | Manual prereq complete |
+| W1 | M1 | M0 done |
+| W2 | M2, M3 | M1 done |
+| W3 | M4, M6 | M2 done (M4 also needs M3) |
+| W4 | M5, M8 | M4 done (M8 also needs M6) |
+| W5 | M7 | M4, M5, M6 all done |
+| W6 | M9 | M5, M7 done |
+| W7 | M10 | M9 done |
+
+---
+
+## Phase 1 — Archived
+
+Phase 1 (PA + CTO MVP) is archived at `BUILD_STATUS.phase1.archive.md`. Do not edit the archive.
