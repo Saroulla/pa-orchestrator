@@ -40,7 +40,7 @@ Required deletions and edits:
 4. **`01.Project_Management/BUILD_STATUS.md`** — find your step and confirm its status is `todo` and all its dependencies are `done`.
 5. **`01.Project_Management/MAKER_build.md`** — read the card for **your step only**. It contains the interface contract, files to touch, and the gate table.
 
-> **Deprecated:** `01.Project_Management/Execution_Plan.md` describes an earlier RAG-first MAKER design that has been superseded. Do not consult it.
+> **Deprecated:** `01.Project_Management/Execution_Plan.md` previously described a RAG-first MAKER design that has been superseded. It has been rewritten as a high-level overview that points back here — consult it only for the post-MVP roadmap.
 
 ---
 

@@ -1,6 +1,6 @@
 # MAKER — Iterative Goal-Execution Spec
 
-> **Authoritative spec.** This document supersedes `Execution_Plan.md` (same directory). The earlier RAG-first MAKER design is no longer the target.
+> **Authoritative spec.** The prior RAG-first MAKER design that lived in `Execution_Plan.md` is no longer the target; that file has been rewritten as an overview that points here.
 >
 > **How to use this doc:** Read your step's card in `MAKER_build.md` (same directory) first; come here for the spec details that card references. The section anchors below (`#state`, `#safety`, …) are the deep-link targets used by the build cards.
 >
